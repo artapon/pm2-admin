@@ -1,8 +1,6 @@
 # PM2 Admin 🚀
 A modern, beautiful, and secure web interface for managing your PM2 processes — **specifically designed and verified for Windows Server environments.** An excellent open-source alternative to PM2 Plus for Enterprise Windows deployments.
 
-![PM2 Monitor](https://via.placeholder.com/1200x600/1e293b/FFFFFF?text=PM2+Services+Monitor+Dashboard)
-
 ## ✨ Features
 
 - 📊 **Real-time Monitoring**: Track CPU, Memory, Uptime, and Status of all your PM2 processes at once.
@@ -46,10 +44,10 @@ cp .env.example .env
 ```bash
 npm start
 ```
-The application will run on the port defined in `.env` (default is 4000).
+The application will run on the port defined in `.env` (default is 7002).
 
 ### 4. Initial Setup
-1. Visit `http://localhost:4000` in your browser.
+1. Visit `http://localhost:7002` in your browser.
 2. If this is a fresh installation, you will be automatically redirected to the **Initial Setup** page.
 3. Create your first **Root** account.
 4. Log in and start managing your services!
@@ -57,7 +55,7 @@ The application will run on the port defined in `.env` (default is 4000).
 ## 🐳 Deployment with PM2
 To run this monitor itself as a PM2 service:
 ```bash
-pm2 start .\src\app.js --name "pm2-monitor" --log-date-format "YYYY-MM-DD HH:mm:ss"
+pm2 start .\src\app.js --name "pm2-monitor:7002" --log-date-format "YYYY-MM-DD HH:mm:ss"
 ```
 
 ## 🔒 Security
