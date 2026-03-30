@@ -1,0 +1,27 @@
+{
+  "name": "PM2 Services Monitor",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mdi/font": "^7.4.47",
+    "axios": "^1.13.2",
+    "chart.js": "^4.5.1",
+    "pinia": "^3.0.4",
+    "sass": "^1.94.2",
+    "vite-plugin-vuetify": "^2.1.2",
+    "vue": "^3.5.24",
+    "vue-chartjs": "^5.3.3",
+    "vue-router": "^4.6.3",
+    "vuetify": "^3.11.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "vite": "^5.4.21"
+  }
+}
