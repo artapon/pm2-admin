@@ -1,5 +1,5 @@
-# PM2 Services Monitor 🚀
-A modern, beautiful, and secure web interface for managing your PM2 processes. An excellent open-source alternative to PM2 Plus with role-based access control and advanced system management.
+# PM2 Admin 🚀
+A modern, beautiful, and secure web interface for managing your PM2 processes — **specifically designed and verified for Windows Server environments.** An excellent open-source alternative to PM2 Plus for Enterprise Windows deployments.
 
 ![PM2 Monitor](https://via.placeholder.com/1200x600/1e293b/FFFFFF?text=PM2+Services+Monitor+Dashboard)
 
@@ -20,16 +20,18 @@ A modern, beautiful, and secure web interface for managing your PM2 processes. A
 
 ## 🛠️ Prerequisites
 
+- **OS**: Windows Server (2016 / 2019 / 2022) or Windows 10/11
 - **Node.js**: v16+
 - **PM2**: `npm install -g pm2`
+- **Git**: [Git for Windows](https://git-scm.com/download/win) installed.
 - **SQLite3**: Automatically handled via `better-sqlite3`.
 
 ## 🚀 Quick Start
 
 ### 1. Installation
 ```bash
-git clone https://your-repo-url/pm2-services-monitor.git
-cd pm2-services-monitor
+git clone https://your-repo-url/pm2-admin.git
+cd pm2-admin
 npm install
 ```
 
