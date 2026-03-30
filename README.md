@@ -44,10 +44,10 @@ cp .env.example .env
 ```bash
 npm start
 ```
-The application will run on the port defined in `.env` (default is 7002).
+The application will run on the port defined in `.env` (default is 4000).
 
 ### 4. Initial Setup
-1. Visit `http://localhost:7002` in your browser.
+1. Visit `http://localhost:4000` in your browser.
 2. If this is a fresh installation, you will be automatically redirected to the **Initial Setup** page.
 3. Create your first **Root** account.
 4. Log in and start managing your services!
@@ -55,7 +55,7 @@ The application will run on the port defined in `.env` (default is 7002).
 ## 🐳 Deployment with PM2
 To run this monitor itself as a PM2 service:
 ```bash
-pm2 start .\src\app.js --name "pm2-monitor:7002" --log-date-format "YYYY-MM-DD HH:mm:ss"
+pm2 start .\src\app.js --name "pm2-monitor" --log-date-format "YYYY-MM-DD HH:mm:ss"
 ```
 
 ## 🔒 Security
@@ -67,4 +67,4 @@ pm2 start .\src\app.js --name "pm2-monitor:7002" --log-date-format "YYYY-MM-DD H
 Feel free to open issues or submit pull requests to improve the platform!
 
 ## 📄 License
-MIT © 2026 Surya T
+MIT © 2026
