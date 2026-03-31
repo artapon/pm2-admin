@@ -211,65 +211,59 @@ const showSnackbar = (text, color = 'success') => {
 
 <style scoped>
 .app-bar-gradient {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: #0d0d14 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
 }
 
 .toolbar-title {
   display: flex;
   align-items: center;
-  font-size: 1.25rem;
-}
-
-.logout-btn {
-  text-transform: none;
+  font-size: 1.1rem;
   font-weight: 600;
-  transition: all 0.3s ease;
+  color: #f1f5f9;
 }
 
 .action-header-btn {
   text-transform: none;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  transition: all 0.3s ease;
-}
-
-.action-header-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  font-weight: 500;
+  font-size: 0.85rem;
+  letter-spacing: 0;
+  transition: opacity var(--transition-fast);
 }
 
 .user-menu-btn {
   text-transform: none;
-  font-weight: 600;
-  border-color: rgba(255, 255, 255, 0.3);
-  transition: all 0.3s ease;
+  font-weight: 500;
+  font-size: 0.85rem;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #94a3b8 !important;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .user-menu-btn:hover {
-  border-color: #ffffff;
-  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  color: #f1f5f9 !important;
 }
 
 .user-dropdown-list {
-  background: rgba(15, 23, 42, 0.95) !important;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px !important;
+  background: #13131f !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px !important;
   min-width: 200px;
-  color: white;
-  padding: 8px;
+  color: #f1f5f9;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
 
 .dropdown-item {
-  transition: all 0.2s ease;
-  border-radius: 8px !important;
-  margin-bottom: 4px;
+  transition: background-color var(--transition-fast);
+  border-radius: 6px !important;
+  margin-bottom: 2px;
+  font-size: 0.875rem;
 }
 
 .dropdown-item:hover {
-  background-color: rgba(102, 126, 234, 0.2) !important;
-  color: #a5b4fc !important;
+  background-color: rgba(99, 102, 241, 0.12) !important;
 }
 
 .logout-item:hover {

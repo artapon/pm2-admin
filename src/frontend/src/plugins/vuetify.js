@@ -21,21 +21,23 @@ export default createVuetify({
             dark: {
                 dark: true,
                 colors: {
-                    background: '#0f172a',
-                    surface: '#1e293b',
-                    'surface-variant': '#334155',
-                    primary: '#14b8a6',
-                    'primary-darken-1': '#0d9488',
-                    secondary: '#06b6d4',
-                    'secondary-darken-1': '#0891b2',
-                    success: '#10b981',
+                    background: '#0d0d14',
+                    surface: '#13131f',
+                    'surface-variant': '#1a1a2e',
+                    primary: '#6366f1',
+                    'primary-darken-1': '#4f46e5',
+                    secondary: '#818cf8',
+                    'secondary-darken-1': '#6366f1',
+                    success: '#22c55e',
+                    'success-darken-1': '#16a34a',
                     warning: '#f59e0b',
                     error: '#ef4444',
                     info: '#06b6d4',
-                    'on-background': '#e2e8f0',
-                    'on-surface': '#e2e8f0',
+                    'on-background': '#f1f5f9',
+                    'on-surface': '#f1f5f9',
                     'on-primary': '#ffffff',
                     'on-secondary': '#ffffff',
+                    'on-success': '#ffffff',
                 }
             }
         }

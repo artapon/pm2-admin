@@ -382,24 +382,15 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.app-bar-gradient {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.toolbar-title {
-  display: flex;
-  align-items: center;
-  font-size: 1.25rem;
-}
-
 .main-content {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  background: #0d0d14;
   min-height: 100vh;
 }
 
 .chart-card, .processes-card, .shares-card {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #13131f !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 10px !important;
   height: 100%;
 }
 
@@ -407,36 +398,25 @@ onUnmounted(() => {
   height: 300px !important;
 }
 
-.modern-table :deep(thead) {
-  background-color: rgba(51, 65, 85, 0.5);
+.modern-table :deep(thead tr) {
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .modern-table :deep(th) {
   font-weight: 600 !important;
   text-transform: uppercase;
-  font-size: 0.75rem;
-  letter-spacing: 0.5px;
-  color: #94a3b8 !important;
+  font-size: 0.7rem !important;
+  letter-spacing: 0.06em;
+  color: #64748b !important;
 }
 
-.modern-table :deep(tbody tr:hover) {
-  background-color: rgba(51, 65, 85, 0.3) !important;
+.modern-table :deep(tbody tr:hover td) {
+  background-color: rgba(99, 102, 241, 0.05) !important;
 }
 
 .footer-gradient {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  color: white;
-}
-
-.footer-link {
-  color: white;
-  text-decoration: none;
-  font-weight: 600;
-  transition: opacity 0.2s ease;
-}
-
-.footer-link:hover {
-  opacity: 0.8;
-  text-decoration: underline;
+  background: #0d0d14 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
+  color: #64748b;
 }
 </style>

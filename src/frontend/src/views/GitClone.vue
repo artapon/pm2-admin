@@ -289,66 +289,46 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.app-bar-gradient {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.toolbar-title {
-  display: flex;
-  align-items: center;
-  font-size: 1.25rem;
-}
-
 .main-content {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  background: #0d0d14;
   min-height: 100vh;
 }
 
 .git-clone-card {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #13131f !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 10px !important;
 }
 
 .clone-btn {
   text-transform: none;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  transition: all 0.3s ease;
-}
-
-.clone-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .fade-in {
-  animation: fadeIn 0.5s ease-out;
+  animation: fadeIn 0.4s ease-out;
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .console-log {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  background: #0d0d14;
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 8px;
   padding: 12px;
   max-height: 300px;
   overflow-y: auto;
   font-family: 'Courier New', monospace;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
 }
 
 .log-line {
-  color: #e2e8f0;
-  padding: 4px 0;
+  color: #94a3b8;
+  padding: 3px 0;
   line-height: 1.5;
   white-space: pre-wrap;
   word-wrap: break-word;

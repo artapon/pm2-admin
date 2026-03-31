@@ -102,9 +102,9 @@
     <!-- Add/Edit Dialog -->
     <v-dialog v-model="userDialog" max-width="500">
       <v-card class="glass-card">
-        <v-card-title class="pa-5 bg-primary text-white d-flex align-center">
-          <v-icon class="mr-3">{{ isEditing ? 'mdi-account-edit' : 'mdi-account-plus' }}</v-icon>
-          <span class="text-h6 font-weight-bold">{{ isEditing ? 'Edit User' : 'Add New User' }}</span>
+        <v-card-title class="pa-5 pb-3 d-flex align-center">
+          <v-icon class="mr-3" color="primary">{{ isEditing ? 'mdi-account-edit' : 'mdi-account-plus' }}</v-icon>
+          <span class="text-subtitle-1 font-weight-bold">{{ isEditing ? 'Edit User' : 'Add New User' }}</span>
         </v-card-title>
         
         <v-card-text class="pa-6">
@@ -160,8 +160,11 @@
 
     <!-- Delete Dialog -->
     <v-dialog v-model="deleteDialog" max-width="400">
-      <v-card>
-        <v-card-title class="bg-error text-white pa-4">Confirm Delete</v-card-title>
+      <v-card class="glass-card">
+        <v-card-title class="pa-5 pb-3 d-flex align-center">
+          <v-icon class="mr-2" color="error">mdi-delete-alert</v-icon>
+          Confirm Delete
+        </v-card-title>
         <v-card-text class="pa-6 text-center">
           <v-icon size="48" color="error" class="mb-4">mdi-alert-circle-outline</v-icon>
           <div class="text-h6">Delete User?</div>
@@ -327,53 +330,49 @@ onMounted(loadUsers)
 
 <style scoped>
 .main-content {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  background: #0d0d14;
   min-height: 100vh;
 }
 
 .users-card {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #13131f !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 10px !important;
 }
 
 .search-field :deep(.v-field) {
-  transition: all 0.3s ease;
+  transition: border-color 0.2s ease;
 }
 
 .search-field :deep(.v-field:hover) {
-  border-color: rgba(102, 126, 234, 0.5);
+  border-color: rgba(99, 102, 241, 0.4);
 }
 
-.modern-table :deep(thead) {
-  background-color: rgba(51, 65, 85, 0.5);
+.modern-table :deep(thead tr) {
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .modern-table :deep(th) {
   font-weight: 600 !important;
   text-transform: uppercase;
-  font-size: 0.75rem;
-  letter-spacing: 0.5px;
-  color: #94a3b8 !important;
+  font-size: 0.7rem !important;
+  letter-spacing: 0.06em;
+  color: #64748b !important;
 }
 
-.modern-table :deep(tbody tr:hover) {
-  background-color: rgba(51, 65, 85, 0.3) !important;
+.modern-table :deep(tbody tr:hover td) {
+  background-color: rgba(99, 102, 241, 0.05) !important;
 }
 
 .action-btn {
   text-transform: none;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  transition: all 0.3s ease;
-}
-
-.action-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .glass-card {
-  background: rgba(30, 41, 59, 0.7) !important;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #13131f !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
 }
 </style>

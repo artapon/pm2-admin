@@ -9,37 +9,54 @@
       variant="tonal"
       closable
       @click:close="alert.show = false"
-      class="ma-0 rounded-0 mt-3"
+      class="ma-0 rounded-0"
       style="width: 100%;"
     >
       {{ alert.message }}
     </v-alert>
 
-    <v-container fluid class="pa-5">
+    <v-container fluid class="pa-4">
 
-      <!-- Toggle button -->
-      <v-row class="mb-3" dense>
-        <v-col cols="12" class="d-flex justify-end">
-          <v-btn size="small" variant="outlined" @click="showMetrics = !showMetrics" class="toggle-btn">
-            <v-icon class="mr-1" size="16">{{ showMetrics ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
-            {{ showMetrics ? 'Hide' : 'Show' }} Metrics
-          </v-btn>
-        </v-col>
-      </v-row>
+      <!-- ═══ TOP STRIP: server info + toggle ═══ -->
+      <div class="top-strip mb-3">
+        <div class="top-strip-info" v-if="serverInfo">
+          <div class="strip-item">
+            <v-icon size="14" color="primary" class="strip-icon mr-1">mdi-nodejs</v-icon>
+            <span class="strip-key">Node</span>
+            <span class="strip-val">{{ nodeVersion }}</span>
+          </div>
+          <div class="strip-divider"></div>
+          <div class="strip-item">
+            <v-icon size="14" color="primary" class="strip-icon mr-1">mdi-desktop-tower</v-icon>
+            <span class="strip-key">OS</span>
+            <span class="strip-val">{{ serverInfo.osinfo }}</span>
+          </div>
+          <div class="strip-divider"></div>
+          <div class="strip-item">
+            <v-icon size="14" color="primary" class="strip-icon mr-1">mdi-clock-outline</v-icon>
+            <span class="strip-key">Time</span>
+            <span class="strip-val">{{ serverInfo.timeinfo }}</span>
+          </div>
+        </div>
+        <div class="top-strip-info" v-else></div>
+        <v-btn size="small" variant="outlined" @click="showMetrics = !showMetrics" class="toggle-btn">
+          <v-icon class="mr-1" size="15">{{ showMetrics ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
+          {{ showMetrics ? 'Hide' : 'Show' }} Metrics
+        </v-btn>
+      </div>
 
-      <!-- ═══ ROW 1: Summary stat cards ═══ -->
-      <v-row class="mb-4" dense v-if="showMetrics">
+      <!-- ═══ MAIN METRICS ROW: 4 stats + CPU + Memory ═══ -->
+      <v-row class="mb-3" dense v-if="showMetrics">
+
         <!-- Online -->
-        <v-col cols="6" sm="3">
-          <v-card class="stat-card fade-in" elevation="0" style="animation-delay:0.05s">
-            <v-card-text class="pa-4">
-              <div class="d-flex align-center justify-space-between">
-                <div>
-                  <div class="stat-label">Online</div>
-                  <div class="stat-value text-success">{{ onlineCount }}</div>
-                </div>
+        <v-col cols="6" sm="4" md="2">
+          <v-card class="stat-card fade-in" elevation="0" style="animation-delay:0.04s">
+            <v-card-text class="pa-3">
+              <div class="stat-label">Online</div>
+              <div class="stat-row mt-1">
+                <div class="stat-value text-success">{{ onlineCount }}</div>
                 <div class="stat-icon green-icon">
-                  <v-icon size="22" color="white">mdi-check-circle</v-icon>
+                  <v-icon size="16" color="success">mdi-check-circle</v-icon>
                 </div>
               </div>
             </v-card-text>
@@ -47,16 +64,14 @@
         </v-col>
 
         <!-- Stopped -->
-        <v-col cols="6" sm="3">
-          <v-card class="stat-card fade-in" elevation="0" style="animation-delay:0.1s">
-            <v-card-text class="pa-4">
-              <div class="d-flex align-center justify-space-between">
-                <div>
-                  <div class="stat-label">Stopped</div>
-                  <div class="stat-value text-warning">{{ stoppedCount }}</div>
-                </div>
+        <v-col cols="6" sm="4" md="2">
+          <v-card class="stat-card fade-in" elevation="0" style="animation-delay:0.08s">
+            <v-card-text class="pa-3">
+              <div class="stat-label">Stopped</div>
+              <div class="stat-row mt-1">
+                <div class="stat-value text-warning">{{ stoppedCount }}</div>
                 <div class="stat-icon amber-icon">
-                  <v-icon size="22" color="white">mdi-stop-circle</v-icon>
+                  <v-icon size="16" color="warning">mdi-stop-circle</v-icon>
                 </div>
               </div>
             </v-card-text>
@@ -64,160 +79,120 @@
         </v-col>
 
         <!-- Errored -->
-        <v-col cols="6" sm="3">
-          <v-card class="stat-card fade-in" elevation="0" style="animation-delay:0.15s">
-            <v-card-text class="pa-4">
-              <div class="d-flex align-center justify-space-between">
-                <div>
-                  <div class="stat-label">Errored</div>
-                  <div class="stat-value text-error">{{ erroredCount }}</div>
-                </div>
+        <v-col cols="6" sm="4" md="2">
+          <v-card class="stat-card fade-in" elevation="0" style="animation-delay:0.12s">
+            <v-card-text class="pa-3">
+              <div class="stat-label">Errored</div>
+              <div class="stat-row mt-1">
+                <div class="stat-value text-error">{{ erroredCount }}</div>
                 <div class="stat-icon red-icon">
-                  <v-icon size="22" color="white">mdi-alert-circle</v-icon>
+                  <v-icon size="16" color="error">mdi-alert-circle</v-icon>
                 </div>
               </div>
             </v-card-text>
           </v-card>
         </v-col>
 
-        <!-- Total -->
-        <v-col cols="6" sm="3">
-          <v-card class="stat-card fade-in" elevation="0" style="animation-delay:0.2s">
-            <v-card-text class="pa-4">
-              <div class="d-flex align-center justify-space-between">
-                <div>
-                  <div class="stat-label">Total Apps</div>
-                  <div class="stat-value text-primary">{{ apps.length }}</div>
-                </div>
+        <!-- Total Apps -->
+        <v-col cols="6" sm="4" md="2">
+          <v-card class="stat-card fade-in" elevation="0" style="animation-delay:0.16s">
+            <v-card-text class="pa-3">
+              <div class="stat-label">Total Apps</div>
+              <div class="stat-row mt-1">
+                <div class="stat-value text-primary">{{ apps.length }}</div>
                 <div class="stat-icon blue-icon">
-                  <v-icon size="22" color="white">mdi-apps</v-icon>
+                  <v-icon size="16" color="primary">mdi-apps</v-icon>
                 </div>
               </div>
             </v-card-text>
           </v-card>
         </v-col>
-      </v-row>
 
-      <!-- ═══ ROW 3: CPU + Memory ═══ -->
-      <v-row v-if="serverInfo && showMetrics" class="mb-4" dense>
         <!-- CPU -->
-        <v-col cols="12" sm="6">
-          <v-card class="resource-card fade-in" elevation="0" style="animation-delay:0.3s">
-            <v-card-text class="pa-4">
-              <div class="d-flex align-center mb-3">
-                <div class="resource-icon cpu-icon mr-3">
-                  <v-icon size="18" color="white">mdi-cpu-64-bit</v-icon>
-                </div>
-                <div>
-                  <div class="resource-label">CPU Usage</div>
-                  <div class="resource-value text-h4 font-weight-bold">{{ serverInfo.currentCPU }}%</div>
+        <v-col cols="6" sm="4" md="2" v-if="serverInfo">
+          <v-card class="stat-card resource-card fade-in" elevation="0" style="animation-delay:0.20s">
+            <v-card-text class="pa-3">
+              <div class="d-flex align-center justify-space-between mb-2">
+                <div class="stat-label">CPU</div>
+                <div class="resource-icon cpu-icon">
+                  <v-icon size="13" color="info">mdi-cpu-64-bit</v-icon>
                 </div>
               </div>
+              <div class="stat-value text-info mb-2">{{ serverInfo.currentCPU }}%</div>
               <v-progress-linear
                 :model-value="serverInfo.currentCPU"
                 :color="getProgressColor(serverInfo.currentCPU)"
-                height="5"
+                height="4"
                 rounded
-                bg-color="rgba(255,255,255,0.08)"
+                bg-color="rgba(255,255,255,0.07)"
               ></v-progress-linear>
-              <div class="resource-sub mt-2">{{ serverInfo.cpuInfo }}</div>
+              <div class="resource-sub mt-1 text-truncate">{{ serverInfo.cpuInfo }}</div>
             </v-card-text>
           </v-card>
         </v-col>
 
         <!-- Memory -->
-        <v-col cols="12" sm="6">
-          <v-card class="resource-card fade-in" elevation="0" style="animation-delay:0.35s">
-            <v-card-text class="pa-4">
-              <div class="d-flex align-center mb-3">
-                <div class="resource-icon mem-icon mr-3">
-                  <v-icon size="18" color="white">mdi-memory</v-icon>
-                </div>
-                <div>
-                  <div class="resource-label">Memory Usage</div>
-                  <div class="resource-value text-h4 font-weight-bold">{{ serverInfo.memPercent }}%</div>
+        <v-col cols="6" sm="4" md="2" v-if="serverInfo">
+          <v-card class="stat-card resource-card fade-in" elevation="0" style="animation-delay:0.24s">
+            <v-card-text class="pa-3">
+              <div class="d-flex align-center justify-space-between mb-2">
+                <div class="stat-label">Memory</div>
+                <div class="resource-icon mem-icon">
+                  <v-icon size="13" color="success">mdi-memory</v-icon>
                 </div>
               </div>
+              <div class="stat-value text-success mb-2">{{ serverInfo.memPercent }}%</div>
               <v-progress-linear
                 :model-value="serverInfo.memPercent"
                 :color="getProgressColor(serverInfo.memPercent)"
-                height="5"
+                height="4"
                 rounded
-                bg-color="rgba(255,255,255,0.08)"
+                bg-color="rgba(255,255,255,0.07)"
               ></v-progress-linear>
-              <div class="resource-sub mt-2">{{ serverInfo.memused }} used / {{ serverInfo.memtotal }} total</div>
+              <div class="resource-sub mt-1 text-truncate">{{ serverInfo.memused }} / {{ serverInfo.memtotal }}</div>
             </v-card-text>
           </v-card>
         </v-col>
+
       </v-row>
 
-      <!-- ═══ ROW 4: Disks ═══ -->
-      <v-row v-if="serverInfo && showMetrics && (serverInfo.disks || []).length > 0" class="mb-4" dense>
+      <!-- ═══ DISKS ROW ═══ -->
+      <v-row v-if="serverInfo && showMetrics && (serverInfo.disks || []).length > 0" class="mb-3" dense>
         <v-col
           v-for="(disk, index) in (serverInfo.disks || [])"
           :key="'disk-'+index"
-          cols="12" sm="6" md="3"
+          cols="6" sm="4" md="2"
         >
-          <v-card class="resource-card fade-in" elevation="0" :style="{ 'animation-delay': (0.4 + index * 0.05) + 's' }">
-            <v-card-text class="pa-4">
-              <div class="d-flex align-center mb-3">
-                <div class="resource-icon disk-icon mr-3">
-                  <v-icon size="18" color="white">mdi-harddisk</v-icon>
-                </div>
-                <div>
-                  <div class="resource-label">
-                    Disk {{ disk.mount }}
-                    <span v-if="disk.fs !== disk.mount" class="text-caption text-medium-emphasis">({{ disk.fs }})</span>
-                  </div>
-                  <div class="resource-value">{{ disk.percent }}%</div>
+          <v-card class="stat-card fade-in" elevation="0" :style="{ 'animation-delay': (0.28 + index * 0.04) + 's' }">
+            <v-card-text class="pa-3">
+              <div class="d-flex align-center justify-space-between mb-2">
+                <div class="stat-label text-truncate" style="max-width:80px">Disk {{ disk.mount }}</div>
+                <div class="resource-icon disk-icon">
+                  <v-icon size="13" color="warning">mdi-harddisk</v-icon>
                 </div>
               </div>
+              <div class="stat-value text-warning mb-2">{{ disk.percent }}%</div>
               <v-progress-linear
                 :model-value="disk.percent"
                 :color="getProgressColor(disk.percent)"
-                height="5"
+                height="4"
                 rounded
-                bg-color="rgba(255,255,255,0.08)"
+                bg-color="rgba(255,255,255,0.07)"
               ></v-progress-linear>
-              <div class="resource-sub mt-2">{{ disk.used }} used / {{ disk.total }} total</div>
+              <div class="resource-sub mt-1 text-truncate">{{ disk.used }} / {{ disk.total }}</div>
             </v-card-text>
           </v-card>
         </v-col>
       </v-row>
 
-      <!-- ═══ ROW 5: Applications Table ═══ -->
+      <!-- ═══ APPLICATIONS TABLE ═══ -->
       <v-row>
         <v-col cols="12">
-          <!-- Server Info mini-card at top of table section -->
-          <v-card v-if="serverInfo" class="info-bar fade-in mb-3" elevation="0" style="animation-delay:0.45s">
-            <v-card-text class="pa-2 px-3">
-              <div class="info-bar-inner">
-                <div class="info-item">
-                  <v-icon size="16" color="rgba(148,163,184,0.8)" class="mr-1">mdi-nodejs</v-icon>
-                  <span class="info-key">Node</span>
-                  <span class="info-val">{{ nodeVersion }}</span>
-                </div>
-                <div class="info-divider"></div>
-                <div class="info-item">
-                  <v-icon size="16" color="rgba(148,163,184,0.8)" class="mr-1">mdi-desktop-tower</v-icon>
-                  <span class="info-key">OS</span>
-                  <span class="info-val">{{ serverInfo.osinfo }}</span>
-                </div>
-                <div class="info-divider"></div>
-                <div class="info-item">
-                  <v-icon size="16" color="rgba(148,163,184,0.8)" class="mr-1">mdi-clock-outline</v-icon>
-                  <span class="info-key">Time</span>
-                  <span class="info-val">{{ serverInfo.timeinfo }}</span>
-                </div>
-              </div>
-            </v-card-text>
-          </v-card>
-
-          <v-card class="table-card fade-in" elevation="0" style="animation-delay:0.5s">
+          <v-card class="table-card fade-in" elevation="0" style="animation-delay:0.32s">
             <v-card-title class="table-header pa-4 d-flex align-center">
               <div class="d-flex align-center">
-                <v-icon color="primary" class="mr-2" size="20">mdi-view-list</v-icon>
-                <span class="text-subtitle-1 font-weight-bold">Applications</span>
+                <v-icon color="primary" class="mr-2" size="18">mdi-view-list</v-icon>
+                <span class="text-subtitle-2 font-weight-bold" style="color:#ffffff">Applications</span>
                 <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">{{ apps.length }}</v-chip>
               </div>
               <v-spacer />
@@ -230,10 +205,10 @@
                 variant="outlined"
                 density="compact"
                 class="search-field"
-                style="max-width: 240px;"
+                style="max-width: 220px;"
               ></v-text-field>
             </v-card-title>
-            <v-divider style="border-color: rgba(255,255,255,0.07);"></v-divider>
+            <v-divider style="border-color: rgba(255,255,255,0.06);"></v-divider>
             <v-data-table
               :headers="headers"
               :items="apps"
@@ -255,29 +230,35 @@
                   size="small"
                   class="font-weight-medium status-chip"
                 >
-                  <v-icon start size="12">{{ getStatusIcon(item.status) }}</v-icon>
+                  <v-icon start size="11">{{ getStatusIcon(item.status) }}</v-icon>
                   {{ item.status }}
                 </v-chip>
               </template>
               <template v-slot:item.cpu="{ item }">
-                <span :class="['font-weight-medium', parseFloat(item.cpu) > 70 ? 'text-warning' : '']">{{ item.cpu }}%</span>
+                <span :class="['font-weight-medium', parseFloat(item.cpu) > 70 ? 'text-warning' : 'text-white']">{{ item.cpu }}%</span>
               </template>
               <template v-slot:item.memory="{ item }">
-                <span class="font-weight-medium">{{ item.memory }}</span>
+                <span class="font-weight-medium text-white">{{ item.memory }}</span>
+              </template>
+              <template v-slot:item.restarts="{ item }">
+                <span class="text-white">{{ item.restarts }}</span>
+              </template>
+              <template v-slot:item.uptime="{ item }">
+                <span class="text-white">{{ item.uptime }}</span>
               </template>
               <template v-slot:item.actions="{ item }">
                 <div v-if="authStore.role === 'root'" class="action-buttons">
                   <v-btn size="x-small" color="success" variant="tonal" icon @click="handleReloadApp(item.name)" title="Reload">
-                    <v-icon size="16">mdi-reload</v-icon>
+                    <v-icon size="15">mdi-reload</v-icon>
                   </v-btn>
                   <v-btn size="x-small" color="warning" variant="tonal" icon @click="confirmSimpleRestart(item.name)" title="Restart">
-                    <v-icon size="16">mdi-restart</v-icon>
+                    <v-icon size="15">mdi-restart</v-icon>
                   </v-btn>
                   <v-btn v-if="!item.name.includes('pm2') && item.status === 'online'" size="x-small" color="error" variant="tonal" icon @click="confirmStop(item.name)" title="Stop">
-                    <v-icon size="16">mdi-stop</v-icon>
+                    <v-icon size="15">mdi-stop</v-icon>
                   </v-btn>
                   <v-btn v-if="!item.name.includes('pm2') && (item.status === 'stopped' || item.status === 'errored')" size="x-small" color="error" variant="tonal" icon @click="confirmDelete(item.name)" title="Delete">
-                    <v-icon size="16">mdi-delete</v-icon>
+                    <v-icon size="15">mdi-delete</v-icon>
                   </v-btn>
                 </div>
               </template>
@@ -290,53 +271,53 @@
   </v-main>
 
   <!-- ═══ Confirmation Dialogs ═══ -->
-  <v-dialog v-model="deleteDialog" max-width="420">
+  <v-dialog v-model="deleteDialog" max-width="400">
     <v-card class="dialog-card">
       <v-card-title class="d-flex align-center pa-5 pb-3">
-        <v-icon color="error" class="mr-2">mdi-delete-alert</v-icon>
-        Confirm Delete
+        <v-icon color="error" class="mr-2" size="20">mdi-delete-alert</v-icon>
+        <span class="text-subtitle-1 font-weight-bold">Confirm Delete</span>
       </v-card-title>
       <v-card-text class="px-5 pb-3">
-        Are you sure you want to delete <strong>{{ appToDelete }}</strong>? This will permanently remove the process.
+        Delete <strong>{{ appToDelete }}</strong>? This will permanently remove the process.
       </v-card-text>
       <v-card-actions class="pa-5 pt-2">
         <v-spacer />
-        <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
-        <v-btn color="error" variant="flat" @click="handleDeleteApp">Delete</v-btn>
+        <v-btn variant="text" @click="deleteDialog = false" size="small">Cancel</v-btn>
+        <v-btn color="error" variant="flat" @click="handleDeleteApp" size="small">Delete</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 
-  <v-dialog v-model="restartDialog" max-width="380">
+  <v-dialog v-model="restartDialog" max-width="360">
     <v-card class="dialog-card">
       <v-card-title class="d-flex align-center pa-5 pb-3">
-        <v-icon color="warning" class="mr-2">mdi-restart</v-icon>
-        Confirm Restart
+        <v-icon color="warning" class="mr-2" size="20">mdi-restart</v-icon>
+        <span class="text-subtitle-1 font-weight-bold">Confirm Restart</span>
       </v-card-title>
       <v-card-text class="px-5 pb-3">
         Restart <strong>{{ appToRestart }}</strong>?
       </v-card-text>
       <v-card-actions class="pa-5 pt-2">
         <v-spacer />
-        <v-btn variant="text" @click="restartDialog = false">Cancel</v-btn>
-        <v-btn color="warning" variant="flat" @click="handleSimpleRestart">Restart</v-btn>
+        <v-btn variant="text" @click="restartDialog = false" size="small">Cancel</v-btn>
+        <v-btn color="warning" variant="flat" @click="handleSimpleRestart" size="small">Restart</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 
-  <v-dialog v-model="stopDialog" max-width="380">
+  <v-dialog v-model="stopDialog" max-width="360">
     <v-card class="dialog-card">
       <v-card-title class="d-flex align-center pa-5 pb-3">
-        <v-icon color="error" class="mr-2">mdi-stop-circle</v-icon>
-        Confirm Stop
+        <v-icon color="error" class="mr-2" size="20">mdi-stop-circle</v-icon>
+        <span class="text-subtitle-1 font-weight-bold">Confirm Stop</span>
       </v-card-title>
       <v-card-text class="px-5 pb-3">
         Stop <strong>{{ appToStop }}</strong>?
       </v-card-text>
       <v-card-actions class="pa-5 pt-2">
         <v-spacer />
-        <v-btn variant="text" @click="stopDialog = false">Cancel</v-btn>
-        <v-btn color="error" variant="flat" @click="handleStopApp">Stop</v-btn>
+        <v-btn variant="text" @click="stopDialog = false" size="small">Cancel</v-btn>
+        <v-btn color="error" variant="flat" @click="handleStopApp" size="small">Stop</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -480,174 +461,180 @@ onMounted(() => { loadDashboard() })
 <style scoped>
 /* ── Base ─────────────────────────────────────── */
 .main-content {
-  background: #0d1117;
+  background: #0d0d14;
   min-height: 100vh;
 }
 
 /* ── Fade-in animation ────────────────────────── */
 .fade-in {
-  animation: fadeInUp 0.4s ease-out forwards;
+  animation: fadeInUp 0.35s ease-out forwards;
   opacity: 0;
 }
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Stat cards (row 1) ───────────────────────── */
-.stat-card {
-  background: #161b22 !important;
-  border: 1px solid rgba(255,255,255,0.07) !important;
-  border-radius: 10px !important;
-  transition: border-color 0.2s, transform 0.2s;
+/* ── Top strip ────────────────────────────────── */
+.top-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.stat-card:hover {
-  border-color: rgba(99,102,241,0.35) !important;
-  transform: translateY(-2px);
+.top-strip-info {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 0;
 }
-.stat-label {
-  font-size: 0.7rem;
+.strip-item {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+}
+.strip-item:first-child { padding-left: 0; }
+.strip-icon {
+  background: rgb(var(--v-theme-primary)) !important;
+  border-radius: 4px;
+  padding: 2px;
+}
+.strip-key {
+  font-size: 0.68rem;
+  color: #ffffff;
+  text-transform: uppercase;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #ffffff;
-  margin-bottom: 2px;
-}
-.stat-value {
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1;
-}
-.stat-icon {
-  width: 40px; height: 40px;
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.green-icon  { background: linear-gradient(135deg, #10b981, #059669); }
-.amber-icon  { background: linear-gradient(135deg, #f59e0b, #d97706); }
-.red-icon    { background: linear-gradient(135deg, #ef4444, #dc2626); }
-.blue-icon   { background: linear-gradient(135deg, #6366f1, #4f46e5); }
-
-/* ── Server info bar (row 2) ──────────────────── */
-.info-bar {
-  background: #161b22 !important;
-  border: 1px solid rgba(255,255,255,0.07) !important;
-  border-radius: 10px !important;
-}
-.info-bar-inner {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 0;
-}
-.info-item {
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  flex-wrap: wrap;
-}
-.info-item:first-child { padding-left: 4px; }
-.info-key {
-  font-size: 0.72rem;
-  color: #ffffff;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-right: 6px;
+  font-weight: 500;
+  margin-right: 5px;
   white-space: nowrap;
 }
-.info-val {
-  font-size: 0.82rem;
-  color: #cbd5e1;
+.strip-val {
+  font-size: 0.78rem;
+  color: #ffffff;
   font-weight: 500;
-  word-break: break-word;
+  white-space: nowrap;
 }
-.info-divider {
+.strip-divider {
   width: 1px;
-  height: 18px;
-  background: rgba(255,255,255,0.1);
+  height: 14px;
+  background: rgba(255,255,255,0.08);
   flex-shrink: 0;
 }
 @media (max-width: 600px) {
-  .info-bar-inner { flex-direction: column; align-items: flex-start; }
-  .info-divider { display: none; }
-  .info-item { padding: 4px 0; }
+  .top-strip-info { display: none; }
 }
 
-/* ── Resource cards (row 3) ───────────────────── */
-.resource-card {
-  background: #161b22 !important;
+/* ── Toggle button ────────────────────────────── */
+.toggle-btn {
+  text-transform: none;
+  font-weight: 500;
+  font-size: 0.8rem;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.toggle-btn:hover {
+  border-color: rgba(99, 102, 241, 0.4) !important;
+  background-color: rgba(99, 102, 241, 0.08) !important;
+}
+
+/* ── Shared card base ─────────────────────────── */
+.stat-card {
+  background: #13131f !important;
   border: 1px solid rgba(255,255,255,0.07) !important;
   border-radius: 10px !important;
   height: 100%;
-  transition: border-color 0.2s, transform 0.2s;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.resource-card:hover {
-  border-color: rgba(99,102,241,0.35) !important;
-  transform: translateY(-2px);
+.stat-card:hover {
+  border-color: rgba(99,102,241,0.28) !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35) !important;
 }
-.resource-icon {
-  width: 36px; height: 36px;
-  border-radius: 9px;
+
+/* ── Stat card content ────────────────────────── */
+.stat-label {
+  font-size: 0.67rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffffff;
+  font-weight: 500;
+}
+.stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.stat-icon {
+  width: 30px; height: 30px;
+  border-radius: 7px;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
-.cpu-icon  { background: linear-gradient(135deg, #06b6d4, #0891b2); }
-.mem-icon  { background: linear-gradient(135deg, #10b981, #059669); }
-.disk-icon { background: linear-gradient(135deg, #f59e0b, #d97706); }
-.resource-label {
-  font-size: 0.72rem;
-  color: #ffffff;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.green-icon  { background: rgba(34, 197, 94,  0.12); border: 1px solid rgba(34, 197, 94,  0.2); }
+.amber-icon  { background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.2); }
+.red-icon    { background: rgba(239, 68,  68,  0.12); border: 1px solid rgba(239, 68,  68,  0.2); }
+.blue-icon   { background: rgba(99,  102, 241, 0.12); border: 1px solid rgba(99,  102, 241, 0.2); }
+
+/* ── Resource cards (CPU / Memory / Disk) ─────── */
+.resource-icon {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
 }
-.resource-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.1;
-  color: #e2e8f0;
-}
+.cpu-icon  { background: rgba(6, 182, 212, 0.12);  border: 1px solid rgba(6, 182, 212, 0.2); }
+.mem-icon  { background: rgba(34, 197, 94,  0.12);  border: 1px solid rgba(34, 197, 94,  0.2); }
+.disk-icon { background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.2); }
 .resource-sub {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: #ffffff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ── Applications table ───────────────────────── */
 .table-card {
-  background: #161b22 !important;
+  background: #13131f !important;
   border: 1px solid rgba(255,255,255,0.07) !important;
   border-radius: 10px !important;
   overflow: hidden;
 }
-.table-header {
-  background: transparent;
-}
+.table-header { background: transparent; }
+
 .search-field :deep(.v-field) { transition: border-color 0.2s; }
-.search-field :deep(.v-field:hover)  { border-color: rgba(99,102,241,0.4); }
+.search-field :deep(.v-field:hover) { border-color: rgba(99,102,241,0.4); }
 .search-field :deep(.v-field--focused) { border-color: rgba(99,102,241,0.7); }
 
-.modern-table :deep(thead tr) { background: rgba(255,255,255,0.03); }
+.modern-table :deep(thead tr) { background: rgba(255,255,255,0.025); }
 .modern-table :deep(th) {
-  font-size: 0.7rem !important;
+  font-size: 0.68rem !important;
   font-weight: 600 !important;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #ffffff !important;
 }
+.modern-table :deep(td) { color: #ffffff !important; }
 .modern-table :deep(tbody tr:hover td) { background: rgba(99,102,241,0.05) !important; }
 .modern-table :deep(tbody tr) { transition: background 0.15s; }
 
 .app-name-link {
-  color: #818cf8;
+  color: #ffffff !important;
   text-decoration: none;
   font-weight: 600;
   transition: color 0.15s;
 }
-.app-name-link:hover { color: #a5b4fc; text-decoration: underline; }
+.app-name-link:hover {
+  color: #a5b4fc !important;
+  text-decoration: underline;
+}
 
-.status-chip { font-size: 0.7rem !important; }
+.status-chip { font-size: 0.68rem !important; }
 
 .action-buttons {
   display: flex;
@@ -657,22 +644,8 @@ onMounted(() => { loadDashboard() })
 
 /* ── Dialogs ──────────────────────────────────── */
 .dialog-card {
-  background: #1e2433 !important;
-  border: 1px solid rgba(255,255,255,0.1) !important;
+  background: #13131f !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
   border-radius: 12px !important;
-}
-
-.toggle-btn {
-  text-transform: none;
-  font-weight: 500;
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #94a3b8;
-  transition: all 0.3s ease;
-}
-
-.toggle-btn:hover {
-  border-color: rgba(99, 102, 241, 0.5);
-  background-color: rgba(99, 102, 241, 0.1);
-  color: #e2e8f0;
 }
 </style>

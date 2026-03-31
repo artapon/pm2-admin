@@ -123,3 +123,5 @@ dist
 /screenshots
 env
 Jenkinsfile
+
+.claude/

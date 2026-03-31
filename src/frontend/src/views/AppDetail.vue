@@ -80,7 +80,7 @@
                 <v-col cols="12" sm="6" md="3">
                   <div class="metric-box">
                     <div class="metric-icon-small cpu-icon">
-                      <v-icon size="20" color="white">mdi-cpu-64-bit</v-icon>
+                      <v-icon size="20" color="info">mdi-cpu-64-bit</v-icon>
                     </div>
                     <div class="ml-3">
                       <div class="text-caption text-medium-emphasis">CPU Usage</div>
@@ -93,7 +93,7 @@
                 <v-col cols="12" sm="6" md="3">
                   <div class="metric-box">
                     <div class="metric-icon-small memory-icon">
-                      <v-icon size="20" color="white">mdi-memory</v-icon>
+                      <v-icon size="20" color="success">mdi-memory</v-icon>
                     </div>
                     <div class="ml-3">
                       <div class="text-caption text-medium-emphasis">Memory</div>
@@ -106,7 +106,7 @@
                 <v-col cols="12" sm="6" md="3">
                   <div class="metric-box">
                     <div class="metric-icon-small restart-icon">
-                      <v-icon size="20" color="white">mdi-restart</v-icon>
+                      <v-icon size="20" color="warning">mdi-restart</v-icon>
                     </div>
                     <div class="ml-3">
                       <div class="text-caption text-medium-emphasis">Restarts</div>
@@ -119,7 +119,7 @@
                 <v-col cols="12" sm="6" md="3">
                   <div class="metric-box">
                     <div class="metric-icon-small uptime-icon">
-                      <v-icon size="20" color="white">mdi-clock-outline</v-icon>
+                      <v-icon size="20" color="primary">mdi-clock-outline</v-icon>
                     </div>
                     <div class="ml-3">
                       <div class="text-caption text-medium-emphasis">Uptime</div>
@@ -397,9 +397,9 @@
 
   <!-- Delete Confirmation Dialog -->
   <v-dialog v-model="deleteDialog" max-width="500">
-    <v-card>
-      <v-card-title class="text-h5 bg-error text-white">
-        <v-icon class="mr-2" color="white">mdi-alert</v-icon>
+    <v-card class="dialog-card">
+      <v-card-title class="pa-5 pb-3 d-flex align-center">
+        <v-icon class="mr-2" color="error">mdi-alert</v-icon>
         Confirm Delete
       </v-card-title>
       <v-card-text class="pt-4">
@@ -416,9 +416,9 @@
 
   <!-- Restart with Rename Dialog -->
   <v-dialog v-model="restartDialog" max-width="500">
-    <v-card>
-      <v-card-title class="text-h5 bg-warning text-white">
-        <v-icon class="mr-2" color="white">mdi-restart</v-icon>
+    <v-card class="dialog-card">
+      <v-card-title class="pa-5 pb-3 d-flex align-center">
+        <v-icon class="mr-2" color="warning">mdi-restart</v-icon>
         Restart Application
       </v-card-title>
       <v-card-text class="pt-4">
@@ -450,9 +450,9 @@
 
   <!-- Flush Confirmation Dialog -->
   <v-dialog v-model="flushDialog" max-width="500">
-    <v-card>
-      <v-card-title class="text-h5 bg-secondary text-white">
-        <v-icon class="mr-2" color="white">mdi-delete-sweep</v-icon>
+    <v-card class="dialog-card">
+      <v-card-title class="pa-5 pb-3 d-flex align-center">
+        <v-icon class="mr-2" color="secondary">mdi-delete-sweep</v-icon>
         Confirm Flush Logs
       </v-card-title>
       <v-card-text class="pt-4">
@@ -682,7 +682,7 @@ onMounted(() => {
 }
 
 .main-content {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  background: #0d0d14;
   min-height: 100vh;
 }
 
@@ -706,23 +706,23 @@ onMounted(() => {
 }
 
 .cpu-icon {
-  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
-  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.2);
 }
 
 .memory-icon {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.2);
 }
 
 .restart-icon {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
 .uptime-icon {
-  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
-  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.2);
 }
 
 .info-item {
@@ -744,11 +744,11 @@ onMounted(() => {
 }
 
 .output-log {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  background: #0d0d14;
 }
 
 .error-log {
-  background: linear-gradient(135deg,#1e293b,#0f172a)
+  background: #0d0d14;
 }
 
 .log-content {
@@ -766,8 +766,9 @@ onMounted(() => {
 }
 
 .footer-gradient {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  color: white;
+  background: #0d0d14 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
+  color: #64748b;
 }
 
 .footer-link {
@@ -794,12 +795,19 @@ onMounted(() => {
 .toggle-details-btn {
   text-transform: none;
   font-weight: 500;
-  border-color: rgba(255, 255, 255, 0.3);
-  transition: all 0.3s ease;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  transition: border-color 0.2s ease;
 }
 
 .toggle-details-btn:hover {
-  border-color: rgba(102, 126, 234, 0.5);
-  background-color: rgba(102, 126, 234, 0.1);
+  border-color: rgba(99, 102, 241, 0.4);
+  background-color: rgba(99, 102, 241, 0.08);
+}
+
+.dialog-card {
+  background: #13131f !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
 }
 </style>

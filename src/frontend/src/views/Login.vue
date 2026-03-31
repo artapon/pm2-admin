@@ -1,13 +1,6 @@
 <template>
   <v-app>
     <div class="login-page">
-      <!-- Animated Background -->
-      <div class="login-background">
-        <div class="gradient-orb orb-1"></div>
-        <div class="gradient-orb orb-2"></div>
-        <div class="gradient-orb orb-3"></div>
-      </div>
-
       <!-- Login Card -->
       <v-container class="fill-height" fluid>
         <v-row align="center" justify="center">
@@ -102,24 +95,30 @@ const handleLogin = async () => {
 <style scoped>
 .login-page {
   min-height: 100vh;
+  background: #0d0d14;
   position: relative;
   overflow: hidden;
 }
 
-@keyframes bgPulse {
-  0% { transform: scale(1); }
-  33% {
-    transform: translate(30px, -30px) scale(1.1);
-  }
-  66% {
-    transform: translate(-20px, 20px) scale(0.9);
-  }
-  100% { transform: scale(1); }
+.login-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 20%, rgba(99, 102, 241, 0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 80% 80%, rgba(99, 102, 241, 0.04) 0%, transparent 70%);
+  pointer-events: none;
 }
 
 .login-card-wrapper {
   position: relative;
   z-index: 1;
+  animation: fadeInUp 0.4s ease-out;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .login-header {
@@ -131,57 +130,42 @@ const handleLogin = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 80px;
-  height: 80px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 20px;
-  margin-bottom: 1rem;
-  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+  width: 64px;
+  height: 64px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 16px;
+  margin-bottom: 1.25rem;
 }
 
 .login-title {
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin-bottom: 0.5rem;
+  color: #f1f5f9;
+  margin-bottom: 0.35rem;
+  letter-spacing: -0.01em;
 }
 
 .login-subtitle {
-  color: #94a3b8;
-  font-size: 0.95rem;
+  color: #64748b;
+  font-size: 0.9rem;
   font-weight: 400;
 }
 
 .login-card {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s ease;
+  background: #13131f !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+  transition: border-color 0.2s ease !important;
 }
 
 .login-card:hover {
-  border-color: rgba(102, 126, 234, 0.3);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), 0 0 30px rgba(102, 126, 234, 0.2);
+  border-color: rgba(99, 102, 241, 0.2) !important;
 }
 
 .modern-input :deep(.v-field) {
-  transition: all 0.3s ease;
-}
-
-.modern-input :deep(.v-field:hover) {
-  border-color: rgba(37, 99, 235, 0.5);
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  transition: border-color 0.2s ease;
 }
 </style>
 
