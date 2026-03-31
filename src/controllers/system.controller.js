@@ -14,7 +14,7 @@ const execAsync = promisify(exec);
 const getServerInfo = async (ctx) => {
     try {
         const osInfo = await si.osInfo();
-        const isWindows = (osInfo.platform).toLowerCase().includes('windows');
+        const isWindows = (osInfo.platform).toLowerCase().includes('win');
         const cwd = path.resolve(__dirname, '../../..');
 
         let serverinfo = {};
@@ -37,12 +37,15 @@ const getServerInfo = async (ctx) => {
                 memavailable: formatBytes(mem.available),
                 memPercent: (mem.used * 100 / mem.total).toFixed(2),
                 osinfo: os.platform + ' ' + os.release + ' | Hostname : ' + os.hostname + ' | IP : ' + (network[0]?.ip4 || 'N/A'),
-                diskfs: disk[0]?.fs || '',
-                diskTotal: formatBytes(disk[0]?.size || 0),
-                diskUsed: formatBytes(disk[0]?.used || 0),
-                diskAvail: formatBytes(disk[0]?.available || 0),
-                diskPercent: disk[0] ? (disk[0].used * 100 / disk[0].size).toFixed(2) : '0',
-                diskinfo: 'Drive : ' + (disk[0]?.fs || '') + ' | Total : ' + formatBytes(disk[0]?.size || 0) + ' | Used : ' + formatBytes(disk[0]?.used || 0) + ' | Available : ' + formatBytes(disk[0]?.available || 0),
+                disks: disk.map(d => ({
+                    fs: d.fs,
+                    total: formatBytes(d.size || 0),
+                    used: formatBytes(d.used || 0),
+                    available: formatBytes(d.available || 0),
+                    percent: d.size ? (d.used * 100 / d.size).toFixed(2) : '0',
+                    mount: d.mount,
+                    type: d.type
+                })),
                 timeinfo: new Date(time.current) + " " + time.timezoneName
             };
         } catch (e) {
@@ -74,63 +77,81 @@ const getServerInfo = async (ctx) => {
  */
 const getListeningPorts = async (ctx) => {
     try {
-        let listPorts = [];
         const apps = await listApps();
         const osInfo = await si.osInfo();
-        const isWindows = (osInfo.platform).toLowerCase().includes('windows');
+        const isWindows = (osInfo.platform).toLowerCase().includes('win');
+        
+        // Use systeminformation's built-in network connection retrieval
+        // This is much more reliable and cross-platform than manual parsing
+        const connections = await si.networkConnections();
+        
+        let listPorts = connections
+            .filter(conn => conn.state === 'LISTEN' && conn.protocol.startsWith('tcp'))
+            .map(conn => ({
+                protocol: conn.protocol.toUpperCase(),
+                localPort: conn.localPort,
+                localAddress: conn.localAddress,
+                peerAddress: conn.peerAddress || '*',
+                state: conn.state,
+                appName: '-',
+                isPM2Service: false,
+                status: null
+            }));
 
-        if (isWindows) {
-            let stdout = await new Promise((resolve, reject) => {
-                exec('netstat -an | findstr "LISTENING" | findstr "TCP"', { windowsHide: true, shell: true } ,(err, stdout, stderr) => {
-                    if (!err && typeof stdout === 'string') {
-                        resolve(stdout.trim());
-                    }
-                    resolve(null);
-                });
-            });
-
-            // Split the data into an array of lines
-            const lines = stdout.trim().split('\n');
-
-            // Extract TCP, LISTENING, and the number after [:::], and filter out null values
-            listPorts = lines.map(line => {
-                const match = line.match(/(\bTCP\b)\s+(\[.*\]):(\d+)\s+(\[.*\]):(\d+)\s+(\bLISTENING\b)/);
-                return match ? { protocol: match[1], localPort: match[3], remoteAddress: match[4], state: match[5] } : null;
-            }).filter(item => item !== null);
-
-            // Match ports with app names
-            listPorts.forEach(port => {
-                const matchingApp = apps.find(app => (app.name).toLowerCase().includes(port.localPort));
-                if (matchingApp) {
-                    port.appName = matchingApp.name;
-                    port.isPM2Service = true;
-                    port.status = matchingApp.status;
-                } else if (parseInt(port.localPort) >= 49152 && parseInt(port.localPort) <= 65535) {
-                    port.appName = 'Microsoft Dynamic/Private Port';
-                } else if (parseInt(port.localPort) == '8443' || parseInt(port.localPort) == '8080') {
-                    port.appName = 'Mirth Connect / Tomcat Services';
-                } else {
-                    switch (port.localPort) {
-                        case '135':
-                            port.appName = 'Microsoft DCOM';
-                            break;
-                        case '445':
-                            port.appName = 'Microsoft-DS (Directory Services)';
-                            break;
-                        case '2179':
-                            port.appName = 'Microsoft RDP (Remote Desktop Protocol)';
-                            break;
-                        case '2375':
-                            port.appName = 'Docker API';
-                            break;
-                        default:
-                            port.appName = '-';
-                    }
-                }
-            });
+        // Deduplicate ports (si can return multiple entries for same port on different addresses like 0.0.0.0 and [::])
+        const uniquePorts = [];
+        const seenPorts = new Set();
+        
+        for (const port of listPorts) {
+            if (!seenPorts.has(port.localPort)) {
+                seenPorts.add(port.localPort);
+                uniquePorts.push(port);
+            }
         }
+        
+        listPorts = uniquePorts;
 
-        listPorts = listPorts.sort((a, b) => a.localPort - b.localPort);
+        // Match ports with app names and known services
+        listPorts.forEach(port => {
+            const matchingApp = apps.find(app => (app.name).toLowerCase().includes(port.localPort));
+            if (matchingApp) {
+                port.appName = matchingApp.name;
+                port.isPM2Service = true;
+                port.status = matchingApp.status;
+            } else if (isWindows && parseInt(port.localPort) >= 49152 && parseInt(port.localPort) <= 65535) {
+                port.appName = 'Microsoft Dynamic/Private Port';
+            } else if (isWindows && (parseInt(port.localPort) == 8443 || parseInt(port.localPort) == 8080)) {
+                port.appName = 'Mirth Connect / Tomcat Services';
+            } else {
+                switch (port.localPort) {
+                    case '21': port.appName = 'FTP'; break;
+                    case '22': port.appName = 'SSH'; break;
+                    case '23': port.appName = 'Telnet'; break;
+                    case '25': port.appName = 'SMTP'; break;
+                    case '53': port.appName = 'DNS'; break;
+                    case '80': port.appName = 'HTTP'; break;
+                    case '110': port.appName = 'POP3'; break;
+                    case '143': port.appName = 'IMAP'; break;
+                    case '443': port.appName = 'HTTPS'; break;
+                    case '445': port.appName = 'SMB/Microsoft-DS'; break;
+                    case '1433': port.appName = 'MSSQL'; break;
+                    case '1521': port.appName = 'Oracle'; break;
+                    case '3306': port.appName = 'MySQL'; break;
+                    case '3389': port.appName = 'RDP'; break;
+                    case '5432': port.appName = 'PostgreSQL'; break;
+                    case '6379': port.appName = 'Redis'; break;
+                    case '8080': port.appName = 'HTTP-Proxy/Tomcat'; break;
+                    case '8443': port.appName = 'HTTPS-Alt'; break;
+                    case '27017': port.appName = 'MongoDB'; break;
+                    case '2375': port.appName = 'Docker API'; break;
+                    case '135': port.appName = 'Microsoft DCOM'; break;
+                    case '2179': port.appName = 'Microsoft RDP'; break;
+                    default: port.appName = '-';
+                }
+            }
+        });
+
+        listPorts = listPorts.sort((a, b) => parseInt(a.localPort) - parseInt(b.localPort));
 
         ctx.body = {
             success: true,
@@ -140,6 +161,7 @@ const getListeningPorts = async (ctx) => {
             }
         };
     } catch (error) {
+        console.error('Get listening ports error:', error);
         ctx.status = 500;
         ctx.body = {
             success: false,
@@ -288,12 +310,12 @@ const getTopProcesses = async (ctx) => {
 };
 
 /**
- * Get Windows shared folders
+ * Get system shared folders (SMB/NFS)
  */
 const getSharedFolders = async (ctx) => {
     try {
         const osInfo = await si.osInfo();
-        const isWindows = (osInfo.platform).toLowerCase().includes('windows');
+        const isWindows = (osInfo.platform).toLowerCase().includes('win');
 
         let sharedFolders = [];
 
@@ -338,6 +360,84 @@ const getSharedFolders = async (ctx) => {
             } catch (error) {
                 console.error('Failed to get shared folders:', error);
             }
+        } else {
+            // Linux implementation
+            // 1. Try Samba (SMB) shares using smbstatus
+            try {
+                const { stdout } = await execAsync('smbstatus -S 2>/dev/null', { shell: true });
+                if (stdout) {
+                    const lines = stdout.split('\n');
+                    let dataStarted = false;
+                    for (let line of lines) {
+                        line = line.trim();
+                        if (line.includes('Service') && line.includes('pid') && line.includes('Machine')) {
+                            dataStarted = true;
+                            continue;
+                        }
+                        if (line.startsWith('-----------------')) {
+                            dataStarted = true;
+                            continue;
+                        }
+                        if (dataStarted && line) {
+                            const parts = line.split(/\s+/);
+                            if (parts.length >= 4) {
+                                sharedFolders.push({
+                                    shareName: parts[0],
+                                    path: 'SMB Share',
+                                    remark: `User: ${parts[2]} | IP: ${parts[3]}`
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                // smbstatus failed, try parsing smb.conf or usershares
+            }
+
+            // 2. Try NFS exports
+            try {
+                const { stdout } = await execAsync('exportfs -v 2>/dev/null', { shell: true });
+                if (stdout) {
+                    const lines = stdout.split('\n');
+                    for (let line of lines) {
+                        line = line.trim();
+                        if (line && !line.includes('conf')) {
+                            const parts = line.split(/\s+/);
+                            if (parts.length >= 2) {
+                                sharedFolders.push({
+                                    shareName: 'NFS Export',
+                                    path: parts[0],
+                                    remark: parts.slice(1).join(' ')
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                // exportfs failed
+            }
+            
+            // 3. Try net usershare (common on desktop Linux)
+            try {
+                const { stdout } = await execAsync('net usershare list 2>/dev/null', { shell: true });
+                if (stdout) {
+                    const shareNames = stdout.trim().split(/\s+/);
+                    for (const name of shareNames) {
+                        const { stdout: info } = await execAsync(`net usershare info "${name}"`, { shell: true });
+                        const pathMatch = info.match(/path=(.*)/);
+                        const remarkMatch = info.match(/comment=(.*)/);
+                        if (pathMatch) {
+                            sharedFolders.push({
+                                shareName: name,
+                                path: pathMatch[1].trim(),
+                                remark: remarkMatch ? remarkMatch[1].trim() : ''
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                // net usershare failed
+            }
         }
 
         ctx.body = {
@@ -363,7 +463,7 @@ const getSharedFolders = async (ctx) => {
 const getScheduledTasks = async (ctx) => {
     try {
         const osInfo = await si.osInfo();
-        const isWindows = (osInfo.platform).toLowerCase().includes('windows');
+        const isWindows = (osInfo.platform).toLowerCase().includes('win');
 
         let scheduledTasks = [];
 
@@ -402,6 +502,37 @@ const getScheduledTasks = async (ctx) => {
                 }
             } catch (error) {
                 console.error('Failed to get scheduled tasks:', error);
+            }
+        } else {
+            // Linux implementation (crontab)
+            try {
+                const { stdout } = await execAsync('crontab -l', { windowsHide: true });
+                if (stdout) {
+                    const lines = stdout.split('\n');
+                    lines.forEach((line, index) => {
+                        const trimmedLine = line.trim();
+                        if (trimmedLine && !trimmedLine.startsWith('#')) {
+                            // Basic parser for crontab syntax: * * * * * command
+                            const parts = trimmedLine.split(/\s+/);
+                            if (parts.length >= 6) {
+                                const schedule = parts.slice(0, 5).join(' ');
+                                const command = parts.slice(5).join(' ');
+                                scheduledTasks.push({
+                                    taskName: `Crontab #${scheduledTasks.length + 1}`,
+                                    nextRunTime: schedule,
+                                    status: 'Active',
+                                    lastRunTime: '-',
+                                    lastResult: '-',
+                                    author: process.env.USER || 'N/A',
+                                    taskToRun: command
+                                });
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                // crontab -l returns 1 and "no crontab for user" on stderr if it's empty
+                console.log('No crontab found or error reading crontab');
             }
         }
 

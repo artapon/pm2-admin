@@ -111,7 +111,7 @@ function stopApp(process) {
 function flushApp(process) {
     console.log('pm2 flush : ' + process);
     return new Promise((resolve, reject) => {
-        exec(`pm2 flush ${process}`, { windowsHide: true, shell: true }, (err, stdout, stderr) => {
+        exec(`pm2 flush "${process}"`, { windowsHide: true, shell: true }, (err, stdout, stderr) => {
             if (!err && typeof stdout === 'string') {
                 resolve(stdout.trim())
             }
@@ -179,7 +179,7 @@ function restartAppWithRename(oldName, newName, scriptPath, cwd, nodeArgs) {
     console.log(`pm2 restart with rename: ${oldName} -> ${newName}`);
     return new Promise((resolve, reject) => {
         // Use exec commands to avoid PM2 API connection issues
-        exec(`pm2 delete ${oldName}`, { windowsHide: true, shell: true }, (deleteErr) => {
+        exec(`pm2 delete "${oldName}"`, { windowsHide: true, shell: true }, (deleteErr) => {
             if (deleteErr) {
                 console.error('Delete error:', deleteErr);
                 reject(deleteErr);

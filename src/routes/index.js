@@ -184,14 +184,14 @@ router.get('/apps/:appName/customlog/download', isAuthenticated, async (ctx) => 
     let app = await describeApp(appName);
     if (app) {
 
-        let custom_log_path = app.pm2_env_cwd + '\\logs\\';
+        let custom_log_path = path.join(app.pm2_env_cwd, 'logs');
         let fileName = "";
         if (fs.existsSync(custom_log_path)) {
             log_path = fs.readdirSync(custom_log_path).filter((file) => fs.lstatSync(path.join(custom_log_path, file)).isFile())
                 .map((file) => ({ file, mtime: fs.lstatSync(path.join(custom_log_path, file)).mtime }))
                 .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
-            fileName = custom_log_path + log_path[0].file;
+            fileName = path.join(custom_log_path, log_path[0].file);
 
             try {
                 if (fs.existsSync(fileName)) {

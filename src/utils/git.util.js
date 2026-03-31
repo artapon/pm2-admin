@@ -46,7 +46,7 @@ const gitPull = async (appName, cwd, username, password, branch)=>{
                 let remote = stdout;
                 remote = remote.replace('https://', "").replace("\n", "");
                 console.log('Remote : ' + remote);
-                remote = `https://${username}:${password}@${remote.trim()}`;
+                remote = `https://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${remote.trim()}`;
 
                 //git stash for clean Local change trust on Repository
                 exec('git stash pop', { cwd }, (err, stdout, stderr) => {

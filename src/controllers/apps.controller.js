@@ -98,15 +98,19 @@ const getDashboard = async (ctx) => {
                 memavailable: formatBytes(mem.available),
                 memPercent: (mem.used * 100 / mem.total).toFixed(2),
                 osinfo: os.platform + ' ' + os.release + ' | Hostname : ' + os.hostname + ' | IP : ' + (network[0]?.ip4 || 'N/A'),
-                diskfs: disk[0]?.fs || '',
-                diskTotal: formatBytes(disk[0]?.size || 0),
-                diskUsed: formatBytes(disk[0]?.used || 0),
-                diskAvail: formatBytes(disk[0]?.available || 0),
-                diskPercent: disk[0] ? (disk[0].used * 100 / disk[0].size).toFixed(2) : '0',
-                diskinfo: 'Drive : ' + (disk[0]?.fs || '') + ' | Total : ' + formatBytes(disk[0]?.size || 0) + ' | Used : ' + formatBytes(disk[0]?.used || 0) + ' | Available : ' + formatBytes(disk[0]?.available || 0),
+                disks: disk.map(d => ({
+                    fs: d.fs,
+                    total: formatBytes(d.size || 0),
+                    used: formatBytes(d.used || 0),
+                    available: formatBytes(d.available || 0),
+                    percent: d.size ? (d.used * 100 / d.size).toFixed(2) : '0',
+                    mount: d.mount,
+                    type: d.type
+                })),
                 timeinfo: new Date(time.current) + " " + time.timezoneName
             };
-            isWindows = (os.platform).toLowerCase().includes('windows');
+            console.log(`[Diagnostic] Dashboard Disk Scan: Found ${serverinfo.disks.length} disks.`);
+            isWindows = (os.platform).toLowerCase().includes('win');
         } catch (e) {
             console.log(e);
         }
@@ -153,7 +157,7 @@ const getApp = async (ctx) => {
 
         let networks = await si.networkInterfaces();
         let os = await si.osInfo();
-        let isWindows = (os.platform).toLowerCase().includes('windows');
+        let isWindows = (os.platform).toLowerCase().includes('win');
         let portHTTP = '';
         let portHTTPS = '';
 
@@ -178,7 +182,7 @@ const getApp = async (ctx) => {
         const stdout = await readLogsReverse({ filePath: app.pm_out_log_path });
         const stderr = await readLogsReverse({ filePath: app.pm_err_log_path });
         let customlog = null;
-        let custom_log_path = app.pm2_env_cwd + '\\logs\\';
+        let custom_log_path = path.join(app.pm2_env_cwd, 'logs');
         let log_path = "";
 
         stdout.lines = stdout.lines.map(log => {
@@ -196,7 +200,7 @@ const getApp = async (ctx) => {
                 .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
             if (log_path[0]) {
-                customlog = await readLogsReverse({ filePath: custom_log_path + log_path[0].file });
+                customlog = await readLogsReverse({ filePath: path.join(custom_log_path, log_path[0].file) });
                 customlog.lines = customlog.lines.map(log => {
                     return ansiConvert.toHtml(log);
                 }).join('<br/>');
