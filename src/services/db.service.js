@@ -1,4 +1,5 @@
 const Database = require('better-sqlite3');
+const { Store } = require('express-session');
 const path = require('path');
 const config = require('../config');
 const fs = require('fs');
@@ -24,57 +25,75 @@ const initDb = () => {
             role TEXT NOT NULL DEFAULT 'user',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
+        );
+        CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+        CREATE TABLE IF NOT EXISTS sessions (
+            sid TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            expires_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
     `);
 
-    // Check if users table is empty
-    const usersCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-
-    if (usersCount === 0) {
-        console.log('Users table is empty, migrating admin users from .env...');
-        
-        const insertUser = db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)');
-        
-        if (config.APP_USERNAME && config.APP_PASSWORD) {
-            try {
-                insertUser.run(config.APP_USERNAME, config.APP_PASSWORD, 'root');
-                console.log(`Migrated root user: ${config.APP_USERNAME}`);
-            } catch (err) {
-                console.error(`Failed to migrate ${config.APP_USERNAME}: ${err.message}`);
-            }
+    // Migration: Rename 'admin' role to 'root'
+    try {
+        const updateRootStmt = db.prepare("UPDATE users SET role = 'root' WHERE role = 'admin'");
+        const resRoot = updateRootStmt.run();
+        if (resRoot.changes > 0) {
+            console.log(`Migrated ${resRoot.changes} users from 'admin' to 'root' role.`);
         }
+    } catch (err) {
+        console.error(`Failed to update roles: ${err.message}`);
+    }
+}
 
-        if (config.IT_APP_USERNAME && config.IT_APP_PASSWORD) {
-            try {
-                // Change itadmin to support (view only)
-                insertUser.run(config.IT_APP_USERNAME, config.IT_APP_PASSWORD, 'support');
-                console.log(`Migrated support user: ${config.IT_APP_USERNAME}`);
-            } catch (err) {
-                console.error(`Failed to migrate ${config.IT_APP_USERNAME}: ${err.message}`);
-            }
-        }
-    } else {
-        // Migration: Rename 'admin' role to 'root'
+class SQLiteStore extends Store {
+    constructor() {
+        super();
+        // Purge expired sessions once an hour
+        setInterval(() => {
+            db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now());
+        }, 60 * 60 * 1000).unref();
+    }
+
+    get(sid, cb) {
         try {
-            const updateRootStmt = db.prepare("UPDATE users SET role = 'root' WHERE role = 'admin'");
-            const resRoot = updateRootStmt.run();
-            if (resRoot.changes > 0) {
-                console.log(`Migrated ${resRoot.changes} users from 'admin' to 'root' role.`);
+            const row = db.prepare('SELECT data, expires_at FROM sessions WHERE sid = ?').get(sid);
+            if (!row) return cb(null, null);
+            if (row.expires_at < Date.now()) {
+                db.prepare('DELETE FROM sessions WHERE sid = ?').run(sid);
+                return cb(null, null);
             }
-            
-            // Re-ensure itadmin is support (just in case)
-            const updateSuppStmt = db.prepare("UPDATE users SET role = 'support' WHERE role = 'itadmin'");
-            const resSupp = updateSuppStmt.run();
-            if (resSupp.changes > 0) {
-                console.log(`Migrated ${resSupp.changes} users from 'itadmin' to 'support' role.`);
-            }
-        } catch (err) {
-            console.error(`Failed to update roles: ${err.message}`);
-        }
+            return cb(null, JSON.parse(row.data));
+        } catch (err) { return cb(err); }
+    }
+
+    set(sid, session, cb) {
+        try {
+            const expires = session.cookie?.expires
+                ? new Date(session.cookie.expires).getTime()
+                : Date.now() + 7 * 24 * 60 * 60 * 1000;
+            db.prepare('INSERT OR REPLACE INTO sessions (sid, data, expires_at) VALUES (?, ?, ?)')
+                .run(sid, JSON.stringify(session), expires);
+            return cb(null);
+        } catch (err) { return cb(err); }
+    }
+
+    destroy(sid, cb) {
+        try {
+            db.prepare('DELETE FROM sessions WHERE sid = ?').run(sid);
+            return cb(null);
+        } catch (err) { return cb(err); }
+    }
+
+    touch(sid, session, cb) {
+        this.set(sid, session, cb);
     }
 }
 
 module.exports = {
     db,
-    initDb
+    initDb,
+    SQLiteStore
 };

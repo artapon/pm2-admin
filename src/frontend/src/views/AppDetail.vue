@@ -109,11 +109,6 @@
                 <v-col cols="12" v-if="app.exec_path">
                   <div class="info-row"><v-icon size="15" color="info" class="mr-2">mdi-console</v-icon><span class="info-key">Exec:</span><span class="info-val text-truncate">{{ app.exec_path }}</span></div>
                 </v-col>
-                <v-col cols="12" v-if="docUrl">
-                  <div class="info-row"><v-icon size="15" color="info" class="mr-2">mdi-file-document-outline</v-icon><span class="info-key">API Docs:</span>
-                    <a :href="docUrl" target="_blank" class="info-link">{{ docUrl }}</a>
-                  </div>
-                </v-col>
               </v-row>
             </v-card-text>
           </template>
@@ -294,14 +289,6 @@ const restartDialog = ref(false)
 const flushDialog = ref(false)
 const newAppName = ref('')
 const nodeArgsEdit = ref('')
-
-const docUrl = computed(() => {
-  if (!app.value || (!app.value.port_http && !app.value.port_https)) return null
-  const port = app.value.port_http || app.value.port_https
-  const protocol = app.value.port_http ? 'http' : 'https'
-  const base = `${protocol}://${app.value.app_base_url}:${port}`
-  return app.value.name.includes('sap') ? `${base}/v1/docs/` : `${base}/docs/api/v1/`
-})
 
 const rawLogs = computed(() => logs.value[logType.value] || 'No logs available')
 
