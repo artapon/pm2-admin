@@ -2,18 +2,6 @@ const fs = require('fs');
 const envfile = require('envfile')
 const path = require('path')
 
-const getEnvFileContentObject = async (wd)=>{
-    const envPath = path.join(wd, '.env')
-    return new Promise((resolve, reject) => {
-        fs.readFile(envPath , 'utf-8', function(err, data){
-            if(!err){
-                resolve(parseEnv(data))
-            }
-            resolve(null)
-        })
-    })
-}
-
 const getEnvFileRawContent = async (wd)=>{
     const envPath = path.join(wd, '.env')
     return new Promise((resolve, reject) => {
@@ -112,7 +100,6 @@ const setEnvDataSyncAndBackup = (wd, appName, envData) => {
 
 module.exports = {
     parseEnv,
-    getEnvFileContentObject,
     getEnvFileRawContent,
     getEnvDataSync,
     setEnvDataSync,

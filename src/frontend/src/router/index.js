@@ -55,6 +55,18 @@ const routes = [
         meta: { requiresAuth: true, requiresAdmin: true }
     },
     {
+        path: '/log-rotate',
+        name: 'LogRotate',
+        component: () => import('../views/LogRotate.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
+        path: '/plugins',
+        name: 'Plugins',
+        component: () => import('../views/Plugins.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
         path: '/',
         redirect: '/apps'
     }

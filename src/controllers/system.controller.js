@@ -1,32 +1,41 @@
-const { listApps } = require('../providers/pm2/api');
-const { pm2Save, nodeInfo } = require('../providers/pm2/api');
+const { listApps, pm2Save, nodeInfo } = require('../providers/pm2/api');
 const { formatBytes } = require('../utils/format.util');
 const si = require('systeminformation');
 const path = require("path");
+const fs = require('fs');
+const os = require('os');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 
+// Cache platform detection — resolved once on first use
+let _isWindows = null;
+const getIsWindows = async () => {
+    if (_isWindows === null) {
+        const os = await si.osInfo();
+        _isWindows = os.platform.toLowerCase().includes('win');
+    }
+    return _isWindows;
+};
 
-/**
- * Get server information
- */
-const getServerInfo = async (ctx) => {
+const getServerInfo = async (req, res) => {
     try {
-        const osInfo = await si.osInfo();
-        const isWindows = (osInfo.platform).toLowerCase().includes('win');
         const cwd = path.resolve(__dirname, '../../..');
 
         let serverinfo = {};
         try {
-            const cpu = await si.currentLoad();
-            const cpuInfo = await si.cpu();
-            const mem = await si.mem();
-            const os = await si.osInfo();
-            const disk = await si.fsSize();
-            const time = await si.time();
-            const networks = await si.networkInterfaces();
-            let network = networks.filter(network => network.default);
+            const [cpu, cpuInfo, mem, os, disk, time, networks] = await Promise.all([
+                si.currentLoad(),
+                si.cpu(),
+                si.mem(),
+                si.osInfo(),
+                si.fsSize(),
+                si.time(),
+                si.networkInterfaces()
+            ]);
+            const isWindows = os.platform.toLowerCase().includes('win');
+            _isWindows = isWindows; // populate cache
+            const network = networks.filter(n => n.default);
 
             serverinfo = {
                 cpuInfo: `${cpuInfo.manufacturer} ${cpuInfo.brand} ${cpuInfo.speed} GHz ${cpuInfo.cores} cores.`,
@@ -36,7 +45,7 @@ const getServerInfo = async (ctx) => {
                 memused: formatBytes(mem.used),
                 memavailable: formatBytes(mem.available),
                 memPercent: (mem.used * 100 / mem.total).toFixed(2),
-                osinfo: os.platform + ' ' + os.release + ' | Hostname : ' + os.hostname + ' | IP : ' + (network[0]?.ip4 || 'N/A'),
+                osinfo: `${os.platform} ${os.release} | Hostname : ${os.hostname} | IP : ${network[0]?.ip4 || 'N/A'}`,
                 disks: disk.map(d => ({
                     fs: d.fs,
                     total: formatBytes(d.size || 0),
@@ -46,7 +55,7 @@ const getServerInfo = async (ctx) => {
                     mount: d.mount,
                     type: d.type
                 })),
-                timeinfo: new Date(time.current) + " " + time.timezoneName
+                timeinfo: new Date(time.current) + ' ' + time.timezoneName
             };
         } catch (e) {
             console.log(e);
@@ -54,37 +63,21 @@ const getServerInfo = async (ctx) => {
 
         const node = await nodeInfo();
 
-        ctx.body = {
+        res.json({
             success: true,
-            data: {
-                serverinfo,
-                isWindows,
-                cwd,
-                node
-            }
-        };
+            data: { serverinfo, isWindows, cwd, node }
+        });
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Get listening ports
- */
-const getListeningPorts = async (ctx) => {
+const getListeningPorts = async (req, res) => {
     try {
-        const apps = await listApps();
-        const osInfo = await si.osInfo();
-        const isWindows = (osInfo.platform).toLowerCase().includes('win');
-        
-        // Use systeminformation's built-in network connection retrieval
-        // This is much more reliable and cross-platform than manual parsing
+        const [apps, isWindows] = await Promise.all([listApps(), getIsWindows()]);
+
         const connections = await si.networkConnections();
-        
+
         let listPorts = connections
             .filter(conn => conn.state === 'LISTEN' && conn.protocol.startsWith('tcp'))
             .map(conn => ({
@@ -98,22 +91,25 @@ const getListeningPorts = async (ctx) => {
                 status: null
             }));
 
-        // Deduplicate ports (si can return multiple entries for same port on different addresses like 0.0.0.0 and [::])
         const uniquePorts = [];
         const seenPorts = new Set();
-        
         for (const port of listPorts) {
             if (!seenPorts.has(port.localPort)) {
                 seenPorts.add(port.localPort);
                 uniquePorts.push(port);
             }
         }
-        
         listPorts = uniquePorts;
 
-        // Match ports with app names and known services
+        // Build port→app Map for O(1) lookup instead of O(n*m) find
+        const portToApp = new Map();
+        apps.forEach(app => {
+            const m = app.name.match(/:(\d+)/);
+            if (m) portToApp.set(m[1], app);
+        });
+
         listPorts.forEach(port => {
-            const matchingApp = apps.find(app => (app.name).toLowerCase().includes(port.localPort));
+            const matchingApp = portToApp.get(port.localPort);
             if (matchingApp) {
                 port.appName = matchingApp.name;
                 port.isPM2Service = true;
@@ -153,101 +149,60 @@ const getListeningPorts = async (ctx) => {
 
         listPorts = listPorts.sort((a, b) => parseInt(a.localPort) - parseInt(b.localPort));
 
-        ctx.body = {
-            success: true,
-            data: {
-                listPorts,
-                isWindows
-            }
-        };
+        res.json({ success: true, data: { listPorts, isWindows } });
     } catch (error) {
         console.error('Get listening ports error:', error);
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Save PM2 process list
- */
-const savePM2 = async (ctx) => {
+const savePM2 = async (req, res) => {
     try {
         const pm2save = await pm2Save();
 
-        if (pm2save.status == 'success') {
-            ctx.body = {
-                success: true,
-                message: pm2save.msg
-            };
+        if (pm2save.status === 'success') {
+            res.json({ success: true, message: pm2save.msg });
         } else {
-            ctx.status = 500;
-            ctx.body = {
-                success: false,
-                error: pm2save.msg
-            };
+            res.status(500).json({ success: false, error: pm2save.msg });
         }
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Git clone repository
- */
-const gitClone = async (ctx) => {
+const gitClone = async (req, res) => {
     try {
-        const { gitUrl, gitUsername, gitPassword, tofolder, branch = 'master', envContent, appName, startScript } = ctx.request.body;
+        const { gitUrl, gitUsername, gitPassword, tofolder, branch = 'master', envContent, appName, startScript } = req.body;
 
         if (!gitUrl || !gitUsername || !gitPassword || !envContent || !startScript || !appName) {
-            ctx.status = 400;
-            ctx.body = {
+            return res.status(400).json({
                 success: false,
                 error: 'gitUrl, gitUsername, gitPassword, envContent, startScript, and appName are required'
-            };
-            return;
+            });
         }
 
         const { gitClone: gitCloneUtil } = require('../utils/git.util');
         const gitCloneStatus = await gitCloneUtil(gitUrl, gitUsername, gitPassword, tofolder || '', branch, envContent, appName, startScript);
 
-        if (gitCloneStatus.status == 'success') {
-            ctx.body = {
-                success: true,
-                message: gitCloneStatus.msg
-            };
+        if (gitCloneStatus.status === 'success') {
+            res.json({ success: true, message: gitCloneStatus.msg });
         } else {
-            ctx.status = 500;
-            ctx.body = {
-                success: false,
-                error: gitCloneStatus.msg
-            };
+            res.status(500).json({ success: false, error: gitCloneStatus.msg });
         }
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Get system monitoring data (CPU, RAM, Disk I/O)
- */
-const getSystemMonitor = async (ctx) => {
+const getSystemMonitor = async (req, res) => {
     try {
-        const cpu = await si.currentLoad();
-        const cpuInfo = await si.cpu();
-        const mem = await si.mem();
+        const [cpu, cpuInfo, mem] = await Promise.all([
+            si.currentLoad(),
+            si.cpu(),
+            si.mem()
+        ]);
 
-        ctx.body = {
+        res.json({
             success: true,
             data: {
                 cpu: {
@@ -263,25 +218,17 @@ const getSystemMonitor = async (ctx) => {
                 },
                 timestamp: Date.now()
             }
-        };
+        });
     } catch (error) {
         console.error('System monitor error:', error);
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Get top 100 processes
- */
-const getTopProcesses = async (ctx) => {
+const getTopProcesses = async (req, res) => {
     try {
         const processes = await si.processes();
 
-        // Sort by CPU and get top 100
         const topProcesses = processes.list
             .sort((a, b) => b.cpu - a.cpu)
             .slice(0, 100)
@@ -289,70 +236,43 @@ const getTopProcesses = async (ctx) => {
                 pid: proc.pid,
                 name: proc.name,
                 cpu: parseFloat(proc.cpu.toFixed(2)),
-                memory: proc.mem || 0,
-                memoryPercent: parseFloat((proc.memPercent || 0).toFixed(2))
+                memory: (proc.memRss || 0) * 1024,
+                memoryPercent: parseFloat((proc.mem || 0).toFixed(2))
             }));
 
-        ctx.body = {
-            success: true,
-            data: {
-                processes: topProcesses
-            }
-        };
+        res.json({ success: true, data: { processes: topProcesses } });
     } catch (error) {
         console.error('Get processes error:', error);
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Get system shared folders (SMB/NFS)
- */
-const getSharedFolders = async (ctx) => {
+const getSharedFolders = async (req, res) => {
     try {
-        const osInfo = await si.osInfo();
-        const isWindows = (osInfo.platform).toLowerCase().includes('win');
+        const isWindows = await getIsWindows();
 
         let sharedFolders = [];
 
         if (isWindows) {
             try {
                 const { stdout } = await execAsync('net share', { windowsHide: true, shell: false });
-
-                // Parse the output
                 const lines = stdout.split('\n');
                 let dataStarted = false;
 
                 for (let line of lines) {
                     line = line.trim();
-
-                    // Skip header lines and separators
                     if (line.includes('Share name') || line.includes('---') || line === '') {
                         if (line.includes('---')) dataStarted = true;
                         continue;
                     }
-
                     if (dataStarted && line) {
-                        // Parse share information
-                        // Format: ShareName  DiskType  Path  Remark
-                        const parts = line.split(/\s{2,}/); // Split by 2 or more spaces
-
+                        const parts = line.split(/\s{2,}/);
                         if (parts.length >= 2) {
                             const shareName = parts[0];
-                            const path = parts[1] || '';
+                            const sharePath = parts[1] || '';
                             const remark = parts.slice(3).join(' ') || '';
-
-                            // Skip system shares (ending with $) and command completed message
                             if (!shareName.endsWith('$') && !line.includes('command completed')) {
-                                sharedFolders.push({
-                                    shareName,
-                                    path,
-                                    remark
-                                });
+                                sharedFolders.push({ shareName, path: sharePath, remark });
                             }
                         }
                     }
@@ -361,8 +281,6 @@ const getSharedFolders = async (ctx) => {
                 console.error('Failed to get shared folders:', error);
             }
         } else {
-            // Linux implementation
-            // 1. Try Samba (SMB) shares using smbstatus
             try {
                 const { stdout } = await execAsync('smbstatus -S 2>/dev/null', { shell: true });
                 if (stdout) {
@@ -370,31 +288,18 @@ const getSharedFolders = async (ctx) => {
                     let dataStarted = false;
                     for (let line of lines) {
                         line = line.trim();
-                        if (line.includes('Service') && line.includes('pid') && line.includes('Machine')) {
-                            dataStarted = true;
-                            continue;
-                        }
-                        if (line.startsWith('-----------------')) {
-                            dataStarted = true;
-                            continue;
-                        }
+                        if (line.includes('Service') && line.includes('pid') && line.includes('Machine')) { dataStarted = true; continue; }
+                        if (line.startsWith('-----------------')) { dataStarted = true; continue; }
                         if (dataStarted && line) {
                             const parts = line.split(/\s+/);
                             if (parts.length >= 4) {
-                                sharedFolders.push({
-                                    shareName: parts[0],
-                                    path: 'SMB Share',
-                                    remark: `User: ${parts[2]} | IP: ${parts[3]}`
-                                });
+                                sharedFolders.push({ shareName: parts[0], path: 'SMB Share', remark: `User: ${parts[2]} | IP: ${parts[3]}` });
                             }
                         }
                     }
                 }
-            } catch (e) {
-                // smbstatus failed, try parsing smb.conf or usershares
-            }
+            } catch (e) { /* smbstatus not available */ }
 
-            // 2. Try NFS exports
             try {
                 const { stdout } = await execAsync('exportfs -v 2>/dev/null', { shell: true });
                 if (stdout) {
@@ -404,89 +309,58 @@ const getSharedFolders = async (ctx) => {
                         if (line && !line.includes('conf')) {
                             const parts = line.split(/\s+/);
                             if (parts.length >= 2) {
-                                sharedFolders.push({
-                                    shareName: 'NFS Export',
-                                    path: parts[0],
-                                    remark: parts.slice(1).join(' ')
-                                });
+                                sharedFolders.push({ shareName: 'NFS Export', path: parts[0], remark: parts.slice(1).join(' ') });
                             }
                         }
                     }
                 }
-            } catch (e) {
-                // exportfs failed
-            }
-            
-            // 3. Try net usershare (common on desktop Linux)
+            } catch (e) { /* exportfs not available */ }
+
             try {
                 const { stdout } = await execAsync('net usershare list 2>/dev/null', { shell: true });
                 if (stdout) {
                     const shareNames = stdout.trim().split(/\s+/);
-                    for (const name of shareNames) {
-                        const { stdout: info } = await execAsync(`net usershare info "${name}"`, { shell: true });
-                        const pathMatch = info.match(/path=(.*)/);
-                        const remarkMatch = info.match(/comment=(.*)/);
-                        if (pathMatch) {
-                            sharedFolders.push({
-                                shareName: name,
-                                path: pathMatch[1].trim(),
-                                remark: remarkMatch ? remarkMatch[1].trim() : ''
-                            });
+                    const results = await Promise.allSettled(
+                        shareNames.map(name => execAsync(`net usershare info "${name}"`, { shell: true }))
+                    );
+                    results.forEach((result, idx) => {
+                        if (result.status === 'fulfilled') {
+                            const info = result.value.stdout;
+                            const pathMatch = info.match(/path=(.*)/);
+                            const remarkMatch = info.match(/comment=(.*)/);
+                            if (pathMatch) {
+                                sharedFolders.push({ shareName: shareNames[idx], path: pathMatch[1].trim(), remark: remarkMatch ? remarkMatch[1].trim() : '' });
+                            }
                         }
-                    }
+                    });
                 }
-            } catch (e) {
-                // net usershare failed
-            }
+            } catch (e) { /* net usershare not available */ }
         }
 
-        ctx.body = {
-            success: true,
-            data: {
-                sharedFolders,
-                isWindows
-            }
-        };
+        res.json({ success: true, data: { sharedFolders, isWindows } });
     } catch (error) {
         console.error('Get shared folders error:', error);
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Get Windows scheduled tasks
- */
-const getScheduledTasks = async (ctx) => {
+const getScheduledTasks = async (req, res) => {
     try {
-        const osInfo = await si.osInfo();
-        const isWindows = (osInfo.platform).toLowerCase().includes('win');
+        const isWindows = await getIsWindows();
 
         let scheduledTasks = [];
 
         if (isWindows) {
             try {
-                const { stdout } = await execAsync('schtasks /query /fo csv /v', {
-                    windowsHide: true,
-                    shell: false
-                });
-
-                // Parse CSV output
+                const { stdout } = await execAsync('schtasks /query /fo csv /v', { windowsHide: true, shell: false });
                 const lines = stdout.split('\n').filter(line => line.trim());
 
                 if (lines.length > 1) {
-                    // Skip header line
                     for (let i = 1; i < lines.length; i++) {
                         const line = lines[i].trim();
                         if (!line) continue;
-
-                        // Parse CSV line (handle quoted fields)
                         const fields = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
                         const cleanFields = fields.map(f => f.replace(/^"|"$/g, '').trim());
-
                         if (cleanFields.length >= 9) {
                             scheduledTasks.push({
                                 taskName: cleanFields[0],
@@ -504,52 +378,89 @@ const getScheduledTasks = async (ctx) => {
                 console.error('Failed to get scheduled tasks:', error);
             }
         } else {
-            // Linux implementation (crontab)
             try {
                 const { stdout } = await execAsync('crontab -l', { windowsHide: true });
                 if (stdout) {
                     const lines = stdout.split('\n');
-                    lines.forEach((line, index) => {
+                    lines.forEach(line => {
                         const trimmedLine = line.trim();
                         if (trimmedLine && !trimmedLine.startsWith('#')) {
-                            // Basic parser for crontab syntax: * * * * * command
                             const parts = trimmedLine.split(/\s+/);
                             if (parts.length >= 6) {
-                                const schedule = parts.slice(0, 5).join(' ');
-                                const command = parts.slice(5).join(' ');
                                 scheduledTasks.push({
                                     taskName: `Crontab #${scheduledTasks.length + 1}`,
-                                    nextRunTime: schedule,
+                                    nextRunTime: parts.slice(0, 5).join(' '),
                                     status: 'Active',
                                     lastRunTime: '-',
                                     lastResult: '-',
                                     author: process.env.USER || 'N/A',
-                                    taskToRun: command
+                                    taskToRun: parts.slice(5).join(' ')
                                 });
                             }
                         }
                     });
                 }
             } catch (error) {
-                // crontab -l returns 1 and "no crontab for user" on stderr if it's empty
                 console.log('No crontab found or error reading crontab');
             }
         }
 
-        ctx.body = {
-            success: true,
-            data: {
-                scheduledTasks,
-                isWindows
-            }
-        };
+        res.json({ success: true, data: { scheduledTasks, isWindows } });
     } catch (error) {
         console.error('Get scheduled tasks error:', error);
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+const LOG_ROTATE_KEYS = ['max_size', 'retain', 'compress', 'dateFormat', 'rotateModule', 'workerInterval', 'rotateInterval', 'TZ'];
+const LOG_ROTATE_DEFAULTS = {
+    max_size: '1G',
+    retain: '3',
+    compress: 'false',
+    dateFormat: 'YYYY-MM-DD_HH-mm-ss',
+    rotateModule: 'true',
+    workerInterval: '30',
+    rotateInterval: '0 0 1 * *',
+    TZ: ''
+};
+
+const getLogRotateConfig = async (req, res) => {
+    try {
+        let installed = false;
+        try {
+            await execAsync('pm2 describe pm2-logrotate', { shell: true, windowsHide: true });
+            installed = true;
+        } catch { installed = false; }
+
+        let config = { ...LOG_ROTATE_DEFAULTS };
+        if (installed) {
+            try {
+                const pm2Home = process.env.PM2_HOME || path.join(os.homedir(), '.pm2');
+                const confPath = path.join(pm2Home, 'module_conf.json');
+                const confData = JSON.parse(fs.readFileSync(confPath, 'utf-8'));
+                if (confData['pm2-logrotate']) {
+                    config = { ...config, ...confData['pm2-logrotate'] };
+                }
+            } catch { /* use defaults */ }
+        }
+
+        res.json({ success: true, data: { installed, config } });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+const setLogRotateConfig = async (req, res) => {
+    try {
+        const { key, value } = req.body;
+        if (!LOG_ROTATE_KEYS.includes(key)) {
+            return res.status(400).json({ success: false, error: 'Invalid configuration key' });
+        }
+        const safeValue = String(value).replace(/"/g, '\\"');
+        await execAsync(`pm2 set pm2-logrotate:${key} "${safeValue}"`, { shell: true, windowsHide: true });
+        res.json({ success: true, message: `pm2-logrotate:${key} updated` });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
@@ -561,5 +472,7 @@ module.exports = {
     getSystemMonitor,
     getTopProcesses,
     getSharedFolders,
-    getScheduledTasks
+    getScheduledTasks,
+    getLogRotateConfig,
+    setLogRotateConfig
 };

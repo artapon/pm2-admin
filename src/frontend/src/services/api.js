@@ -97,6 +97,12 @@ export default {
     getScheduledTasks() {
         return api.get('/system/scheduled-tasks');
     },
+    getLogRotateConfig() {
+        return api.get('/system/logrotate');
+    },
+    setLogRotateConfig(key, value) {
+        return api.post('/system/logrotate', { key, value });
+    },
 
     // Users (IT Admin only)
     getUsers() {
@@ -110,6 +116,9 @@ export default {
     },
     deleteUser(id) {
         return api.delete(`/users/${id}`);
+    },
+    changePassword(id, currentPassword, newPassword) {
+        return api.post(`/users/${id}/change-password`, { currentPassword, newPassword });
     },
     checkSetup() {
         return api.get('/auth/setup-check');
