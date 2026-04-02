@@ -1,113 +1,96 @@
 const { db } = require('../services/db.service');
-const { hashPasswordSync } = require('../utils/password.util');
+const bcrypt = require('bcryptjs');
+const { comparePassword } = require('../utils/password.util');
+const HASH_ROUNDS = 10;
 
-/**
- * Get all users
- */
-const getAllUsers = async (ctx) => {
+const getAllUsers = async (req, res) => {
     try {
         const users = db.prepare('SELECT id, username, role, created_at FROM users ORDER BY id DESC').all();
-        ctx.body = {
-            success: true,
-            data: users
-        };
+        res.json({ success: true, data: users });
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Create a user
- */
-const createUser = async (ctx) => {
+const createUser = async (req, res) => {
     try {
-        const { username, password, role } = ctx.request.body;
-        
+        const { username, password, role } = req.body;
+
         if (!username || !password || !role) {
-            ctx.status = 400;
-            ctx.body = { success: false, error: 'Username, password and role are required' };
-            return;
+            return res.status(400).json({ success: false, error: 'Username, password and role are required' });
         }
 
-        const hashedPassword = hashPasswordSync(password);
-        
-        const stmt = db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)');
-        stmt.run(username, hashedPassword, role);
+        const hashedPassword = await bcrypt.hash(password, HASH_ROUNDS);
+        db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(username, hashedPassword, role);
 
-        ctx.body = {
-            success: true,
-            message: 'User created successfully'
-        };
+        res.json({ success: true, message: 'User created successfully' });
     } catch (error) {
-        ctx.status = 400;
-        ctx.body = {
+        res.status(400).json({
             success: false,
             error: error.message.includes('UNIQUE') ? 'Username already exists' : error.message
-        };
+        });
     }
 };
 
-/**
- * Update user
- */
-const updateUser = async (ctx) => {
+const updateUser = async (req, res) => {
     try {
-        const { id } = ctx.params;
-        const { username, password, role } = ctx.request.body;
-        
+        const { id } = req.params;
+        const { username, password, role } = req.body;
+
         if (password) {
-            const hashedPassword = hashPasswordSync(password);
-            const stmt = db.prepare('UPDATE users SET username = ?, password = ?, role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-            stmt.run(username, hashedPassword, role, id);
+            const hashedPassword = await bcrypt.hash(password, HASH_ROUNDS);
+            db.prepare('UPDATE users SET username = ?, password = ?, role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(username, hashedPassword, role, id);
         } else {
-            const stmt = db.prepare('UPDATE users SET username = ?, role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-            stmt.run(username, role, id);
+            db.prepare('UPDATE users SET username = ?, role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(username, role, id);
         }
 
-        ctx.body = {
-            success: true,
-            message: 'User updated successfully'
-        };
+        res.json({ success: true, message: 'User updated successfully' });
     } catch (error) {
-        ctx.status = 400;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(400).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Delete user
- */
-const deleteUser = async (ctx) => {
+const deleteUser = async (req, res) => {
     try {
-        const { id } = ctx.params;
-        
-        // Prevent deleting self? (optional)
-        const stmt = db.prepare('DELETE FROM users WHERE id = ?');
-        stmt.run(id);
-
-        ctx.body = {
-            success: true,
-            message: 'User deleted successfully'
-        };
+        const { id } = req.params;
+        if (String(id) === '1') {
+            return res.status(403).json({ success: false, error: 'User ID 1 cannot be deleted' });
+        }
+        db.prepare('DELETE FROM users WHERE id = ?').run(id);
+        res.json({ success: true, message: 'User deleted successfully' });
     } catch (error) {
-        ctx.status = 400;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(400).json({ success: false, error: error.message });
     }
 };
 
-module.exports = {
-    getAllUsers,
-    createUser,
-    updateUser,
-    deleteUser
+const changePassword = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { currentPassword, newPassword } = req.body;
+
+        if (String(req.session.user.id) !== String(id)) {
+            return res.status(403).json({ success: false, error: 'You can only change your own password' });
+        }
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ success: false, error: 'Current and new password are required' });
+        }
+        if (newPassword.length < 6) {
+            return res.status(400).json({ success: false, error: 'New password must be at least 6 characters' });
+        }
+
+        const user = db.prepare('SELECT password FROM users WHERE id = ?').get(id);
+        if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+        const valid = await comparePassword(currentPassword, user.password);
+        if (!valid) return res.status(400).json({ success: false, error: 'Current password is incorrect' });
+
+        const hashed = await bcrypt.hash(newPassword, HASH_ROUNDS);
+        db.prepare('UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(hashed, id);
+
+        res.json({ success: true, message: 'Password changed successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 };
+
+module.exports = { getAllUsers, createUser, updateUser, deleteUser, changePassword };

@@ -1,52 +1,32 @@
-const checkAuthentication = async (ctx, next) => {
-    if(ctx.session.isAuthenticated){
-        return ctx.redirect('/apps')
-    }
-    await next()
-}
+const config = require('../config');
 
-const isAuthenticated = async (ctx, next) => {
-    if(!ctx.session.isAuthenticated){
-        // Check if this is an API request
-        if (ctx.path.startsWith('/api/')) {
-            ctx.status = 401;
-            ctx.body = {
-                success: false,
-                error: 'Unauthorized'
-            };
-            return;
+const isAuthenticated = (req, res, next) => {
+    if (!req.session.isAuthenticated) {
+        if (req.originalUrl.startsWith('/api')) {
+            return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
-        return ctx.redirect('/login')
+        return res.redirect('/login');
     }
-    await next()
-}
+    next();
+};
 
-const config = require('../config')
+const isRoot = (req, res, next) => {
+    let role = req.session.role;
 
-const isRoot = async (ctx, next) => {
-    let role = ctx.session.role;
-    
-    // Robust fallback for existing sessions missing role property
-    if (ctx.session.isAuthenticated && !role && ctx.session.username === config.APP_USERNAME) {
+    if (req.session.isAuthenticated && !role && req.session.username === config.APP_USERNAME) {
         role = 'root';
-        ctx.session.role = 'root'; // Persist it for next check
+        req.session.role = 'root';
     }
 
-    console.log(`Checking root role for user: ${ctx.session.username}, role: ${role}`);
-    
-    if(!ctx.session.isAuthenticated || role !== 'root'){
-        ctx.status = 403;
-        ctx.body = {
+    console.log(`Checking root role for user: ${req.session.username}, role: ${role}`);
+
+    if (!req.session.isAuthenticated || role !== 'root') {
+        return res.status(403).json({
             success: false,
             error: `Forbidden: Requires Root role (Current: ${role || 'none'})`
-        };
-        return;
+        });
     }
-    await next();
-}
-
-module.exports = {
-    isAuthenticated,
-    checkAuthentication,
-    isRoot
+    next();
 };
+
+module.exports = { isAuthenticated, isRoot };

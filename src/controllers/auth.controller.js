@@ -1,138 +1,88 @@
 const { validateAdminUser } = require('../services/admin.service');
 const config = require('../config');
 const { db } = require('../services/db.service');
-const { hashPasswordSync } = require('../utils/password.util');
+const bcrypt = require('bcryptjs');
+const { BCRYPT_HASH_ROUNDS } = config.DEFAULTS;
 
-/**
- * Check if initial setup is required (no users exist)
- */
-const checkSetupRequired = async (ctx) => {
+const checkSetupRequired = async (req, res) => {
     const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-    ctx.body = {
-        success: true,
-        setupRequired: userCount === 0
-    };
+    res.json({ success: true, setupRequired: userCount === 0 });
 };
 
-/**
- * Perform initial setup
- */
-const setupInitialRootUser = async (ctx) => {
+const setupInitialRootUser = async (req, res) => {
     const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
     if (userCount > 0) {
-        ctx.status = 400;
-        ctx.body = { success: false, error: 'Initial setup already completed' };
-        return;
+        return res.status(400).json({ success: false, error: 'Initial setup already completed' });
     }
 
-    const { username, password } = ctx.request.body;
+    const { username, password } = req.body;
     if (!username || !password) {
-        ctx.status = 400;
-        ctx.body = { success: false, error: 'Username and password are required' };
-        return;
+        return res.status(400).json({ success: false, error: 'Username and password are required' });
+    }
+    if (username.length > 64 || password.length > 128) {
+        return res.status(400).json({ success: false, error: 'Input too long' });
     }
 
-    const hash = hashPasswordSync(password);
-    db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)')
-        .run(username, hash, 'root');
+    const hash = await bcrypt.hash(password, BCRYPT_HASH_ROUNDS);
+    db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(username, hash, 'root');
 
-    ctx.body = {
-        success: true,
-        message: 'Initial root user created successfully'
-    };
+    res.json({ success: true, message: 'Initial root user created successfully' });
 };
 
-/**
- * Login
- */
-const login = async (ctx) => {
+const login = async (req, res) => {
     try {
-        const { username, password } = ctx.request.body;
-        
+        const { username, password } = req.body;
+
         if (!username || !password) {
-            ctx.status = 400;
-            ctx.body = {
-                success: false,
-                error: 'Username and password are required'
-            };
-            return;
+            return res.status(400).json({ success: false, error: 'Username and password are required' });
+        }
+        if (username.length > 64 || password.length > 128) {
+            return res.status(401).json({ success: false, error: 'Invalid credentials' });
         }
 
         const user = await validateAdminUser(username, password);
-        ctx.session.isAuthenticated = true;
-        ctx.session.username = username;
-        
-        // Robust role assignment
-        if (username === config.APP_USERNAME) {
-            ctx.session.role = 'root';
-        } else {
-            ctx.session.role = user.role || 'user';
-        }
+        req.session.isAuthenticated = true;
+        req.session.username = username;
+        req.session.role = username === config.APP_USERNAME ? 'root' : (user.role || 'user');
 
-        ctx.body = {
+        res.json({
             success: true,
             message: 'Login successful',
             data: {
-                username: ctx.session.username,
-                role: ctx.session.role
+                username: req.session.username,
+                role: req.session.role
             }
-        };
+        });
     } catch (error) {
-        ctx.status = 401;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(401).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Logout
- */
-const logout = async (ctx) => {
-    ctx.session = null;
-    ctx.body = {
-        success: true,
-        message: 'Logout successful'
-    };
+const logout = async (req, res) => {
+    req.session.destroy(() => {
+        res.json({ success: true, message: 'Logout successful' });
+    });
 };
 
-/**
- * Get current session
- */
-const getSession = async (ctx) => {
-    if (ctx.session.isAuthenticated) {
-        // Double check role fallback in session refresh
-        let role = ctx.session.role;
-        if (ctx.session.username === config.APP_USERNAME) {
-            role = 'root';
-        }
+const getSession = async (req, res) => {
+    if (req.session.isAuthenticated) {
+        let role = req.session.role;
+        if (req.session.username === config.APP_USERNAME) role = 'root';
 
-        ctx.body = {
+        res.json({
             success: true,
             data: {
                 isAuthenticated: true,
-                username: ctx.session.username,
-                role: role
+                username: req.session.username,
+                role
             }
-        };
+        });
     } else {
-        ctx.body = {
+        res.json({
             success: true,
-            data: {
-                isAuthenticated: false,
-                username: null
-            }
-        };
+            data: { isAuthenticated: false, username: null }
+        });
     }
 };
 
-module.exports = {
-    login,
-    logout,
-    getSession,
-    checkSetupRequired,
-    setupInitialRootUser
-};
-
-
+module.exports = { login, logout, getSession, checkSetupRequired, setupInitialRootUser };

@@ -1,159 +1,79 @@
 <template>
-  <MainAppBar 
-    title="Listening Ports" 
-    icon="mdi-lan" 
-    :titleIconSize="24" 
-    showBack 
-    @refresh="loadPorts" 
-  />
+  <MainAppBar title="Listening Ports" icon="mdi-lan" :titleIconSize="20" @refresh="loadPorts" />
 
-  <v-main class="main-content">
-    <v-container fluid class="pa-6">
-      <v-row>
-        <v-col cols="12">
-          <v-card class="ports-card glass-card fade-in" elevation="0">
-            <v-card-title class="pa-5 d-flex align-center">
-              <span class="text-h6 font-weight-bold">Listening Ports</span>
-              <v-spacer></v-spacer>
-              <v-text-field
-                v-model="search"
-                prepend-inner-icon="mdi-magnify"
-                label="Search ports..."
-                single-line
-                hide-details
-                variant="outlined"
-                density="compact"
-                class="search-field"
-                style="max-width: 300px;"
-              ></v-text-field>
-            </v-card-title>
-            <v-data-table
-              :headers="headers"
-              :items="ports"
-              :search="search"
-              :loading="loading"
-              class="modern-table"
-              hover
-            >
-              <template v-slot:item.serviceName="{ item }">
-                <div v-if="item.isPM2Service">
-                  <router-link v-if="item.status === 'online'" :to="`/apps/${item.appName}`" class="app-link">
-                    {{ item.appName }}
-                  </router-link>
-                  <span v-else>{{ item.appName }}</span>
-                  <v-chip
-                    :color="item.status === 'online' ? 'success' : 'error'"
-                    variant="flat"
-                    size="x-small"
-                    class="ml-2"
-                  >
-                    {{ item.status }}
-                  </v-chip>
-                </div>
-                <span v-else>{{ item.appName || '-' }}</span>
-              </template>
-            </v-data-table>
-          </v-card>
-        </v-col>
-      </v-row>
+  <v-main class="page-content">
+    <v-container fluid class="pa-4">
+      <v-card class="page-card fade-in" elevation="0">
+        <div class="card-header">
+          <span class="card-title">
+            <v-icon size="15" color="primary">mdi-lan</v-icon>
+            Listening Ports
+            <v-chip size="x-small" color="primary" variant="tonal" class="ml-1">{{ ports.length }}</v-chip>
+          </span>
+          <v-spacer />
+          <v-text-field
+            v-model="search"
+            prepend-inner-icon="mdi-magnify"
+            placeholder="Search..."
+            single-line hide-details variant="outlined" density="compact"
+            class="search-field" style="max-width:220px"
+          />
+        </div>
+        <v-divider class="card-divider" />
+        <v-data-table
+          :headers="headers" :items="ports" :search="search" :loading="loading"
+          class="data-table" hover density="comfortable"
+        >
+          <template v-slot:item.protocol="{ item }">
+            <v-chip size="x-small" variant="tonal" color="info" class="font-weight-medium">{{ item.protocol }}</v-chip>
+          </template>
+          <template v-slot:item.serviceName="{ item }">
+            <div v-if="item.isPM2Service" class="d-flex align-center gap-2">
+              <router-link v-if="item.status==='online'" :to="`/apps/${item.appName}`" class="app-link font-weight-medium">{{ item.appName }}</router-link>
+              <span v-else class="font-weight-medium">{{ item.appName }}</span>
+              <v-chip :color="item.status==='online'?'success':'error'" variant="tonal" size="x-small">{{ item.status }}</v-chip>
+            </div>
+            <span v-else class="text-secondary">{{ item.appName || '-' }}</span>
+          </template>
+          <template v-slot:item.localPort="{ item }">
+            <span class="font-weight-semibold font-mono">{{ item.localPort }}</span>
+          </template>
+        </v-data-table>
+      </v-card>
     </v-container>
   </v-main>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import api from '../services/api'
 import MainAppBar from '../components/MainAppBar.vue'
 
-const router = useRouter()
 const ports = ref([])
 const loading = ref(false)
 const search = ref('')
 
 const headers = [
-  { title: 'Protocol', key: 'protocol' },
-  { title: 'Service Name', key: 'serviceName' },
-  { title: 'Port', key: 'localPort' }
+  { title: 'Protocol', key: 'protocol', width: '110px' },
+  { title: 'Port', key: 'localPort', width: '100px' },
+  { title: 'Service / Application', key: 'serviceName' }
 ]
 
 const loadPorts = async () => {
   loading.value = true
   try {
-    const response = await api.getListeningPorts()
-    if (response.data.success) {
-      ports.value = response.data.data.listPorts || []
-    }
-  } catch (error) {
-    console.error('Failed to load ports:', error)
-  } finally {
-    loading.value = false
-  }
+    const res = await api.getListeningPorts()
+    if (res.data.success) ports.value = (res.data.data.listPorts || []).filter(p => p.isPM2Service)
+  } catch {}
+  finally { loading.value = false }
 }
 
-const goBack = () => {
-  router.push('/apps')
-}
-
-onMounted(() => {
-  loadPorts()
-})
+onMounted(loadPorts)
 </script>
 
 <style scoped>
-.main-content {
-  background: #0d0d14;
-  min-height: 100vh;
-}
-
-.ports-card {
-  background: #13131f !important;
-  border: 1px solid rgba(255, 255, 255, 0.07) !important;
-  border-radius: 10px !important;
-}
-
-.modern-table :deep(thead tr) {
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.modern-table :deep(th) {
-  font-weight: 600 !important;
-  text-transform: uppercase;
-  font-size: 0.7rem !important;
-  letter-spacing: 0.06em;
-  color: #64748b !important;
-}
-
-.modern-table :deep(tbody tr:hover td) {
-  background-color: rgba(99, 102, 241, 0.05) !important;
-}
-
-.app-link {
-  color: #818cf8;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.15s ease;
-}
-
-.app-link:hover {
-  color: #a5b4fc;
-  text-decoration: underline;
-}
-
-.search-field :deep(.v-field) {
-  transition: border-color 0.2s ease;
-}
-
-.search-field :deep(.v-field:hover) {
-  border-color: rgba(99, 102, 241, 0.4);
-}
-
-.fade-in {
-  animation: fadeIn 0.4s ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+.app-link { color:#a5b4fc!important; text-decoration:none; transition:color .15s; }
+.app-link:hover { color:#c7d2fe!important; text-decoration:underline; }
+.font-mono { font-family: 'Courier New', monospace; }
+.text-secondary { color:#94a3b8; }
 </style>

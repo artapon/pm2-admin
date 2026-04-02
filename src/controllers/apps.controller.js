@@ -1,4 +1,4 @@
-const { listApps, describeApp, reloadApp, restartApp, restartAppWithRename, stopApp, flushApp, deleteApp, pm2Save, nodeInfo } = require('../providers/pm2/api');
+const { listApps, describeApp, reloadApp, restartApp, restartAppWithRename, stopApp, flushApp, deleteApp, nodeInfo } = require('../providers/pm2/api');
 const { readLogsReverse } = require('../utils/read-logs.util');
 const { getCurrentGitBranch, getCurrentGitCommit, gitPull, gitClone } = require('../utils/git.util');
 const { getEnvFileRawContent, getEnvFileRawBackupContent, parseEnv, setEnvDataSyncAndBackup } = require('../utils/env.util');
@@ -6,13 +6,10 @@ const { formatBytes } = require('../utils/format.util');
 const AnsiConverter = require('ansi-to-html');
 const ansiConvert = new AnsiConverter();
 const fs = require('fs');
-const path = require("path");
+const path = require('path');
 const si = require('systeminformation');
 
-/**
- * Get all apps
- */
-const getAllApps = async (ctx) => {
+const getAllApps = async (req, res) => {
     try {
         const apps = await listApps();
         const node = await nodeInfo();
@@ -23,17 +20,13 @@ const getAllApps = async (ctx) => {
 
         if (apps) {
             apps.forEach(app => {
-                if (app.status === 'stopped') {
-                    stoppedCount++;
-                } else if (app.status === 'online') {
-                    onlineCount++;
-                } else if (app.status === 'errored') {
-                    erroredCount++;
-                }
+                if (app.status === 'stopped') stoppedCount++;
+                else if (app.status === 'online') onlineCount++;
+                else if (app.status === 'errored') erroredCount++;
             });
         }
 
-        ctx.body = {
+        res.json({
             success: true,
             data: {
                 apps,
@@ -45,24 +38,17 @@ const getAllApps = async (ctx) => {
                     total: apps ? apps.length : 0
                 }
             }
-        };
+        });
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Get dashboard data (apps + server info)
- */
-const getDashboard = async (ctx) => {
+const getDashboard = async (req, res) => {
     try {
         const apps = await listApps();
         const node = await nodeInfo();
-        const username = ctx.session?.username || null;
+        const username = req.session?.username || null;
         const cwd = path.resolve(__dirname, '../../..');
 
         let isWindows = null;
@@ -80,14 +66,18 @@ const getDashboard = async (ctx) => {
 
         let serverinfo = {};
         try {
-            const cpu = await si.currentLoad();
-            const cpuInfo = await si.cpu();
-            const mem = await si.mem();
-            const os = await si.osInfo();
-            const disk = await si.fsSize();
-            const time = await si.time();
-            const networks = await si.networkInterfaces();
-            let network = networks.filter(network => network.default);
+            const [cpu, cpuInfo, mem, os, disk, time, networks] = await Promise.all([
+                si.currentLoad(),
+                si.cpu(),
+                si.mem(),
+                si.osInfo(),
+                si.fsSize(),
+                si.time(),
+                si.networkInterfaces()
+            ]);
+
+            const network = networks.filter(n => n.default);
+            isWindows = os.platform.toLowerCase().includes('win');
 
             serverinfo = {
                 cpuInfo: `${cpuInfo.manufacturer} ${cpuInfo.brand} ${cpuInfo.speed} GHz ${cpuInfo.cores} cores.`,
@@ -97,7 +87,7 @@ const getDashboard = async (ctx) => {
                 memused: formatBytes(mem.used),
                 memavailable: formatBytes(mem.available),
                 memPercent: (mem.used * 100 / mem.total).toFixed(2),
-                osinfo: os.platform + ' ' + os.release + ' | Hostname : ' + os.hostname + ' | IP : ' + (network[0]?.ip4 || 'N/A'),
+                osinfo: `${os.platform} ${os.release} | Hostname : ${os.hostname} | IP : ${network[0]?.ip4 || 'N/A'}`,
                 disks: disk.map(d => ({
                     fs: d.fs,
                     total: formatBytes(d.size || 0),
@@ -107,71 +97,46 @@ const getDashboard = async (ctx) => {
                     mount: d.mount,
                     type: d.type
                 })),
-                timeinfo: new Date(time.current) + " " + time.timezoneName
+                timeinfo: new Date(time.current) + ' ' + time.timezoneName
             };
             console.log(`[Diagnostic] Dashboard Disk Scan: Found ${serverinfo.disks.length} disks.`);
-            isWindows = (os.platform).toLowerCase().includes('win');
         } catch (e) {
             console.log(e);
         }
 
-        ctx.body = {
+        res.json({
             success: true,
-            data: {
-                apps,
-                serverinfo,
-                username,
-                isWindows,
-                stoppedCount,
-                onlineCount,
-                erroredCount,
-                cwd,
-                node
-            }
-        };
+            data: { apps, serverinfo, username, isWindows, stoppedCount, onlineCount, erroredCount, cwd, node }
+        });
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Get single app details
- */
-const getApp = async (ctx) => {
+const getApp = async (req, res) => {
     try {
-        const { appName } = ctx.params;
+        const { appName } = req.params;
         let app = await describeApp(appName);
 
         if (!app) {
-            ctx.status = 404;
-            ctx.body = {
-                success: false,
-                error: 'App not found'
-            };
-            return;
+            return res.status(404).json({ success: false, error: 'App not found' });
         }
 
-        let networks = await si.networkInterfaces();
-        let os = await si.osInfo();
-        let isWindows = (os.platform).toLowerCase().includes('win');
+        const [networks, os] = await Promise.all([si.networkInterfaces(), si.osInfo()]);
+        const isWindows = os.platform.toLowerCase().includes('win');
+
         let portHTTP = '';
         let portHTTPS = '';
-
-        if ((app.name).toString().indexOf(':') !== -1) {
-            portHTTP = (app.name).toString().split(':')[1];
+        if (app.name.toString().indexOf(':') !== -1) {
+            portHTTP = app.name.toString().split(':')[1];
             if (portHTTP.indexOf(',') !== -1) {
-                portHTTP = portHTTP.split(',')[0];
                 portHTTPS = portHTTP.split(',')[1];
+                portHTTP = portHTTP.split(',')[0];
             }
         }
 
-        let network = networks.filter(network => network.default);
-        let baseUrl = network[0]?.ip4 || 'localhost';
-        app.app_base_url = baseUrl;
+        const network = networks.filter(n => n.default);
+        app.app_base_url = network[0]?.ip4 || 'localhost';
         app.port_http = portHTTP;
         app.port_https = portHTTPS;
         app.git_branch = await getCurrentGitBranch(app.pm2_env_cwd);
@@ -179,373 +144,204 @@ const getApp = async (ctx) => {
         app.env_file_raw = await getEnvFileRawContent(app.pm2_env_cwd);
         app.env_file_raw_backup = await getEnvFileRawBackupContent(app.pm2_env_cwd);
 
-        const stdout = await readLogsReverse({ filePath: app.pm_out_log_path });
-        const stderr = await readLogsReverse({ filePath: app.pm_err_log_path });
+        const [stdout, stderr] = await Promise.all([
+            readLogsReverse({ filePath: app.pm_out_log_path }),
+            readLogsReverse({ filePath: app.pm_err_log_path })
+        ]);
+
+        stdout.lines = stdout.lines.map(log => ansiConvert.toHtml(log)).join('<br/>');
+        stderr.lines = stderr.lines.map(log => ansiConvert.toHtml(log)).join('<br/>');
+
         let customlog = null;
-        let custom_log_path = path.join(app.pm2_env_cwd, 'logs');
-        let log_path = "";
-
-        stdout.lines = stdout.lines.map(log => {
-            return ansiConvert.toHtml(log);
-        }).join('<br/>');
-
-        stderr.lines = stderr.lines.map(log => {
-            return ansiConvert.toHtml(log);
-        }).join('<br/>');
-
-        if (fs.existsSync(custom_log_path)) {
-            log_path = fs.readdirSync(custom_log_path)
-                .filter((file) => fs.lstatSync(path.join(custom_log_path, file)).isFile())
-                .map((file) => ({ file, mtime: fs.lstatSync(path.join(custom_log_path, file)).mtime }))
+        const customLogPath = path.join(app.pm2_env_cwd, 'logs');
+        if (fs.existsSync(customLogPath)) {
+            const logFiles = fs.readdirSync(customLogPath)
+                .filter(file => fs.lstatSync(path.join(customLogPath, file)).isFile())
+                .map(file => ({ file, mtime: fs.lstatSync(path.join(customLogPath, file)).mtime }))
                 .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
-            if (log_path[0]) {
-                customlog = await readLogsReverse({ filePath: path.join(custom_log_path, log_path[0].file) });
-                customlog.lines = customlog.lines.map(log => {
-                    return ansiConvert.toHtml(log);
-                }).join('<br/>');
+            if (logFiles[0]) {
+                customlog = await readLogsReverse({ filePath: path.join(customLogPath, logFiles[0].file) });
+                customlog.lines = customlog.lines.map(log => ansiConvert.toHtml(log)).join('<br/>');
             }
         }
 
-        ctx.body = {
+        res.json({
             success: true,
             data: {
                 app,
-                logs: {
-                    stdout,
-                    stderr,
-                    customlog
-                },
+                logs: { stdout, stderr, customlog },
                 isWindows,
-                username: ctx.session?.username || null
+                username: req.session?.username || null
             }
-        };
+        });
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Get app logs
- */
-const getAppLogs = async (ctx) => {
+const getAppLogs = async (req, res) => {
     try {
-        const { appName, logType } = ctx.params;
-        const { nextKey } = ctx.query;
+        const { appName, logType } = req.params;
+        const { nextKey } = req.query;
 
         if (logType !== 'stdout' && logType !== 'stderr') {
-            ctx.status = 400;
-            ctx.body = {
-                success: false,
-                error: 'Log Type must be stdout or stderr'
-            };
-            return;
+            return res.status(400).json({ success: false, error: 'Log Type must be stdout or stderr' });
         }
 
         const app = await describeApp(appName);
         if (!app) {
-            ctx.status = 404;
-            ctx.body = {
-                success: false,
-                error: 'App not found'
-            };
-            return;
+            return res.status(404).json({ success: false, error: 'App not found' });
         }
 
         const filePath = logType === 'stdout' ? app.pm_out_log_path : app.pm_err_log_path;
-        let logs = await readLogsReverse({ filePath, nextKey });
-        logs.lines = logs.lines.map(log => {
-            return ansiConvert.toHtml(log);
-        }).join('<br/>');
+        const logs = await readLogsReverse({ filePath, nextKey });
+        logs.lines = logs.lines.map(log => ansiConvert.toHtml(log)).join('<br/>');
 
-        ctx.body = {
-            success: true,
-            data: {
-                logs
-            }
-        };
+        res.json({ success: true, data: { logs } });
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Reload app
- */
-const reloadAppAction = async (ctx) => {
+const reloadAppAction = async (req, res) => {
     try {
-        const { appName } = ctx.params;
+        const { appName } = req.params;
         const apps = await reloadApp(appName);
 
         if (Array.isArray(apps) && apps.length > 0) {
-            ctx.body = {
-                success: true,
-                message: `App ${appName} reloaded successfully`
-            };
+            res.json({ success: true, message: `App ${appName} reloaded successfully` });
         } else {
-            ctx.status = 400;
-            ctx.body = {
-                success: false,
-                error: 'Failed to reload app'
-            };
+            res.status(400).json({ success: false, error: 'Failed to reload app' });
         }
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Restart app
- */
-const restartAppAction = async (ctx) => {
+const restartAppAction = async (req, res) => {
     try {
-        const { appName } = ctx.params;
+        const { appName } = req.params;
         const apps = await restartApp(appName);
 
         if (Array.isArray(apps) && apps.length > 0) {
-            ctx.body = {
-                success: true,
-                message: `App ${appName} restarted successfully`
-            };
+            res.json({ success: true, message: `App ${appName} restarted successfully` });
         } else {
-            ctx.status = 400;
-            ctx.body = {
-                success: false,
-                error: 'Failed to restart app'
-            };
+            res.status(400).json({ success: false, error: 'Failed to restart app' });
         }
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Stop app
- */
-const stopAppAction = async (ctx) => {
+const stopAppAction = async (req, res) => {
     try {
-        const { appName } = ctx.params;
+        const { appName } = req.params;
         const apps = await stopApp(appName);
 
         if (Array.isArray(apps) && apps.length > 0) {
-            ctx.body = {
-                success: true,
-                message: `App ${appName} stopped successfully`
-            };
+            res.json({ success: true, message: `App ${appName} stopped successfully` });
         } else {
-            ctx.status = 400;
-            ctx.body = {
-                success: false,
-                error: 'Failed to stop app'
-            };
+            res.status(400).json({ success: false, error: 'Failed to stop app' });
         }
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Flush app logs
- */
-const flushAppLogs = async (ctx) => {
+const flushAppLogs = async (req, res) => {
     try {
-        const { appName } = ctx.params;
+        const { appName } = req.params;
         await flushApp(appName);
-
-        ctx.body = {
-            success: true,
-            message: `Logs for ${appName} flushed successfully`
-        };
+        res.json({ success: true, message: `Logs for ${appName} flushed successfully` });
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Update app environment file
- */
-const updateAppEnv = async (ctx) => {
+const updateAppEnv = async (req, res) => {
     try {
-        const { appName } = ctx.params;
-        const { env_content } = ctx.request.body;
+        const { appName } = req.params;
+        const { env_content } = req.body;
 
         if (!env_content) {
-            ctx.status = 400;
-            ctx.body = {
-                success: false,
-                error: 'env_content is required'
-            };
-            return;
+            return res.status(400).json({ success: false, error: 'env_content is required' });
         }
 
         const app = await describeApp(appName);
         if (!app) {
-            ctx.status = 404;
-            ctx.body = {
-                success: false,
-                error: 'App not found'
-            };
-            return;
+            return res.status(404).json({ success: false, error: 'App not found' });
         }
 
         const envContent = await parseEnv(env_content);
         await setEnvDataSyncAndBackup(app.pm2_env_cwd, appName, envContent);
 
-        ctx.body = {
-            success: true,
-            message: `Environment file for ${appName} updated successfully`
-        };
+        res.json({ success: true, message: `Environment file for ${appName} updated successfully` });
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Delete app
- */
-const deleteAppAction = async (ctx) => {
+const deleteAppAction = async (req, res) => {
     try {
-        const { appName } = ctx.params;
+        const { appName } = req.params;
         const apps = await deleteApp(appName);
 
         if (Array.isArray(apps) && apps.length > 0) {
-            ctx.body = {
-                success: true,
-                message: `App ${appName} deleted successfully`
-            };
+            res.json({ success: true, message: `App ${appName} deleted successfully` });
         } else {
-            ctx.status = 400;
-            ctx.body = {
-                success: false,
-                error: 'Failed to delete app'
-            };
+            res.status(400).json({ success: false, error: 'Failed to delete app' });
         }
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Restart app with new name
- */
-const restartAppWithRenameAction = async (ctx) => {
+const restartAppWithRenameAction = async (req, res) => {
     try {
-        const { appName } = ctx.params;
-        const { newAppName, nodeArgs } = ctx.request.body;
+        const { appName } = req.params;
+        const { newAppName, nodeArgs } = req.body;
 
         if (!newAppName) {
-            ctx.status = 400;
-            ctx.body = {
-                success: false,
-                error: 'newAppName is required'
-            };
-            return;
+            return res.status(400).json({ success: false, error: 'newAppName is required' });
         }
 
         const app = await describeApp(appName);
         if (!app) {
-            ctx.status = 404;
-            ctx.body = {
-                success: false,
-                error: 'App not found'
-            };
-            return;
+            return res.status(404).json({ success: false, error: 'App not found' });
         }
 
         const apps = await restartAppWithRename(appName, newAppName, app.exec_path, app.pm2_env_cwd, nodeArgs);
 
         if (Array.isArray(apps) && apps.length > 0) {
-            ctx.body = {
-                success: true,
-                message: `App restarted successfully with new name: ${newAppName}`
-            };
+            res.json({ success: true, message: `App restarted successfully with new name: ${newAppName}` });
         } else {
-            ctx.status = 400;
-            ctx.body = {
-                success: false,
-                error: 'Failed to restart app with new name'
-            };
+            res.status(400).json({ success: false, error: 'Failed to restart app with new name' });
         }
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-/**
- * Git pull for app
- */
-const gitPullApp = async (ctx) => {
+const gitPullApp = async (req, res) => {
     try {
-        const { appName } = ctx.params;
-        const { username, password, branch = 'master' } = ctx.request.body;
+        const { appName } = req.params;
+        const { username, password, branch = 'master' } = req.body;
 
         if (!username || !password) {
-            ctx.status = 400;
-            ctx.body = {
-                success: false,
-                error: 'username and password are required'
-            };
-            return;
+            return res.status(400).json({ success: false, error: 'username and password are required' });
         }
 
         const app = await describeApp(appName);
         if (!app) {
-            ctx.status = 404;
-            ctx.body = {
-                success: false,
-                error: 'App not found'
-            };
-            return;
+            return res.status(404).json({ success: false, error: 'App not found' });
         }
 
         await gitPull(appName, app.pm2_env_cwd, username, password, branch);
 
-        ctx.body = {
-            success: true,
-            message: `Git pull for ${appName} completed`
-        };
+        res.json({ success: true, message: `Git pull for ${appName} completed` });
     } catch (error) {
-        ctx.status = 500;
-        ctx.body = {
-            success: false,
-            error: error.message
-        };
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 

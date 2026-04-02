@@ -1,160 +1,244 @@
 <template>
-  <MainAppBar 
-    title="Scheduled Tasks" 
-    icon="mdi-calendar-clock" 
-    :titleIconSize="24" 
-    showBack 
-    @refresh="loadScheduledTasks" 
-  />
+  <MainAppBar title="Scheduled Tasks" icon="mdi-calendar-clock-outline" :titleIconSize="20" @refresh="loadScheduledTasks" />
 
-  <v-main class="main-content">
-    <v-container fluid class="pa-6">
-      <!-- Scheduled Tasks Table -->
-      <v-row>
-        <v-col cols="12">
-          <v-card class="tasks-card glass-card" elevation="0">
-            <v-card-title class="pa-4">
-              <v-icon class="mr-2" color="primary">mdi-calendar-clock</v-icon>
-              <span class="text-h6 font-weight-bold">Windows Scheduled Tasks</span>
-              <v-spacer></v-spacer>
-              <v-text-field
-                v-model="search"
-                prepend-inner-icon="mdi-magnify"
-                label="Search tasks..."
-                single-line
-                hide-details
-                variant="outlined"
-                density="compact"
-                style="max-width: 300px;"
-              ></v-text-field>
-            </v-card-title>
-            <v-divider></v-divider>
-            <v-data-table
-              :headers="headers"
-              :items="scheduledTasks"
-              :search="search"
-              :loading="loading"
-              :items-per-page="20"
-              class="modern-table"
-              hover
-            >
-              <template v-slot:item.status="{ item }">
-                <v-chip
-                  :color="getStatusColor(item.status)"
-                  size="small"
-                  variant="flat"
-                >
-                  {{ item.status }}
-                </v-chip>
-              </template>
-              <template v-slot:item.taskName="{ item }">
-                <span class="font-weight-medium">{{ item.taskName }}</span>
-              </template>
-              <template v-slot:no-data>
-                <div class="text-center pa-4">
-                  <v-icon size="48" color="grey">mdi-calendar-remove</v-icon>
-                  <p class="text-body-1 mt-2">No scheduled tasks found</p>
-                </div>
-              </template>
-            </v-data-table>
-          </v-card>
-        </v-col>
-      </v-row>
-    </v-container>
+  <v-main class="page-content">
+    <v-container fluid class="pa-4">
+      <v-card class="page-card fade-in" elevation="0">
 
-    <!-- Footer -->
-    <v-footer class="footer-gradient text-center pa-4 mt-8">
-      <div class="w-100">
-        <div class="text-body-2">
-          PM2 Services Monitor © {{ new Date().getFullYear() }}
+        <!-- Card header -->
+        <div class="card-header">
+          <span class="card-title">
+            <v-icon size="15" color="primary">mdi-calendar-clock-outline</v-icon>
+            Scheduled Tasks
+            <v-chip size="x-small" color="primary" variant="tonal" class="ml-1">{{ filtered.length }}</v-chip>
+          </span>
+          <v-spacer />
+          <v-btn
+            :color="showAdvanced ? 'primary' : 'default'"
+            :variant="showAdvanced ? 'tonal' : 'outlined'"
+            size="small"
+            prepend-icon="mdi-tune"
+            class="mr-2 filter-btn"
+            @click="showAdvanced = !showAdvanced"
+          >
+            Filters
+            <v-badge v-if="activeFilterCount" :content="activeFilterCount" color="primary" floating inline class="ml-1" />
+          </v-btn>
+          <v-text-field
+            v-model="search"
+            prepend-inner-icon="mdi-magnify"
+            placeholder="Search..."
+            single-line hide-details variant="outlined" density="compact"
+            class="search-field" style="max-width:220px"
+            clearable
+          />
         </div>
-      </div>
-    </v-footer>
+
+        <!-- Advanced search panel -->
+        <v-expand-transition>
+          <div v-if="showAdvanced" class="advanced-panel">
+            <v-divider class="card-divider" />
+            <div class="advanced-inner">
+              <v-row dense align="center">
+                <v-col cols="12" sm="4" md="3">
+                  <div class="filter-label">Status</div>
+                  <v-select
+                    v-model="filters.status"
+                    :items="statusOptions"
+                    placeholder="All statuses"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    clearable
+                    class="filter-field"
+                  />
+                </v-col>
+                <v-col cols="12" sm="4" md="3">
+                  <div class="filter-label">Author</div>
+                  <v-select
+                    v-model="filters.author"
+                    :items="authorOptions"
+                    placeholder="All authors"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    clearable
+                    class="filter-field"
+                  />
+                </v-col>
+                <v-col cols="12" sm="4" md="3">
+                  <div class="filter-label">Last Result</div>
+                  <v-select
+                    v-model="filters.lastResult"
+                    :items="lastResultOptions"
+                    placeholder="All results"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    clearable
+                    class="filter-field"
+                  />
+                </v-col>
+                <v-col cols="12" md="3" class="d-flex align-end">
+                  <v-btn
+                    variant="text"
+                    class="btn-cancel mt-4"
+                    prepend-icon="mdi-filter-off-outline"
+                    :disabled="!activeFilterCount"
+                    @click="clearFilters"
+                  >
+                    Clear Filters
+                  </v-btn>
+                </v-col>
+              </v-row>
+            </div>
+          </div>
+        </v-expand-transition>
+
+        <v-divider class="card-divider" />
+
+        <v-data-table
+          :headers="headers"
+          :items="filtered"
+          :loading="loading"
+          :items-per-page="25"
+          class="data-table"
+          hover
+          density="comfortable"
+        >
+          <template v-slot:item.status="{ item }">
+            <v-chip :color="statusColor(item.status)" size="small" variant="tonal" class="font-weight-medium">
+              <v-icon start size="12">{{ statusIcon(item.status) }}</v-icon>
+              {{ item.status }}
+            </v-chip>
+          </template>
+          <template v-slot:item.taskName="{ item }">
+            <span class="font-weight-medium">{{ item.taskName }}</span>
+          </template>
+          <template v-slot:item.lastResult="{ item }">
+            <v-chip v-if="item.lastResult" :color="resultColor(item.lastResult)" size="x-small" variant="tonal">
+              {{ item.lastResult }}
+            </v-chip>
+            <span v-else class="text-secondary">—</span>
+          </template>
+          <template v-slot:item.nextRunTime="{ item }">
+            <span class="text-caption">{{ item.nextRunTime || '—' }}</span>
+          </template>
+          <template v-slot:item.lastRunTime="{ item }">
+            <span class="text-caption">{{ item.lastRunTime || '—' }}</span>
+          </template>
+          <template v-slot:no-data>
+            <div class="empty-state">
+              <v-icon size="36" color="grey">mdi-calendar-remove-outline</v-icon>
+              <p class="mt-2 text-body-2 text-medium-emphasis">No scheduled tasks found</p>
+            </div>
+          </template>
+        </v-data-table>
+      </v-card>
+    </v-container>
   </v-main>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed } from 'vue'
 import api from '../services/api'
 import MainAppBar from '../components/MainAppBar.vue'
 
-const router = useRouter()
 const scheduledTasks = ref([])
 const loading = ref(false)
 const search = ref('')
+const showAdvanced = ref(false)
+
+const filters = ref({
+  status: null,
+  author: null,
+  lastResult: null
+})
 
 const headers = [
   { title: 'Task Name', key: 'taskName' },
-  { title: 'Status', key: 'status' },
-  { title: 'Next Run Time', key: 'nextRunTime' },
-  { title: 'Last Run Time', key: 'lastRunTime' },
-  { title: 'Last Result', key: 'lastResult' },
-  { title: 'Author', key: 'author' }
+  { title: 'Status', key: 'status', width: '140px' },
+  { title: 'Next Run', key: 'nextRunTime', width: '160px' },
+  { title: 'Last Run', key: 'lastRunTime', width: '160px' },
+  { title: 'Last Result', key: 'lastResult', width: '130px' },
+  { title: 'Author', key: 'author', width: '130px' }
 ]
 
 const loadScheduledTasks = async () => {
   loading.value = true
   try {
-    const response = await api.getScheduledTasks()
-    if (response.data.success) {
-      scheduledTasks.value = response.data.data.scheduledTasks || []
-    }
-  } catch (error) {
-    console.error('Failed to load scheduled tasks:', error)
-  } finally {
-    loading.value = false
+    const res = await api.getScheduledTasks()
+    if (res.data.success) scheduledTasks.value = res.data.data.scheduledTasks || []
+  } catch {}
+  finally { loading.value = false }
+}
+
+// Dynamic filter options derived from data
+const statusOptions = computed(() => [...new Set(scheduledTasks.value.map(t => t.status).filter(Boolean))])
+const authorOptions = computed(() => [...new Set(scheduledTasks.value.map(t => t.author).filter(Boolean))])
+const lastResultOptions = computed(() => [...new Set(scheduledTasks.value.map(t => t.lastResult).filter(Boolean))])
+
+const activeFilterCount = computed(() =>
+  Object.values(filters.value).filter(v => v !== null && v !== '').length
+)
+
+const filtered = computed(() => {
+  let list = scheduledTasks.value
+
+  if (search.value) {
+    const q = search.value.toLowerCase()
+    list = list.filter(t =>
+      t.taskName?.toLowerCase().includes(q) ||
+      t.author?.toLowerCase().includes(q) ||
+      t.status?.toLowerCase().includes(q)
+    )
   }
+  if (filters.value.status)     list = list.filter(t => t.status === filters.value.status)
+  if (filters.value.author)     list = list.filter(t => t.author === filters.value.author)
+  if (filters.value.lastResult) list = list.filter(t => t.lastResult === filters.value.lastResult)
+
+  return list
+})
+
+const clearFilters = () => {
+  filters.value = { status: null, author: null, lastResult: null }
 }
 
-const goBack = () => {
-  router.push('/apps')
-}
-
-const getStatusColor = (status) => {
-  if (!status) return 'grey'
-  const statusLower = status.toLowerCase()
-  if (statusLower.includes('ready') || statusLower.includes('running')) return 'success'
-  if (statusLower.includes('disabled')) return 'grey'
+const statusColor = (s) => {
+  if (!s) return 'grey'
+  const l = s.toLowerCase()
+  if (l.includes('ready') || l.includes('running')) return 'success'
+  if (l.includes('disabled')) return 'grey'
   return 'warning'
 }
 
-onMounted(() => {
-  loadScheduledTasks()
-})
+const statusIcon = (s) => {
+  if (!s) return 'mdi-help-circle-outline'
+  const l = s.toLowerCase()
+  if (l.includes('running')) return 'mdi-play-circle-outline'
+  if (l.includes('ready'))   return 'mdi-check-circle-outline'
+  if (l.includes('disabled')) return 'mdi-pause-circle-outline'
+  return 'mdi-clock-outline'
+}
+
+const resultColor = (r) => {
+  if (!r) return 'grey'
+  const l = r.toLowerCase()
+  if (l.includes('success') || l === '0') return 'success'
+  if (l.includes('fail') || l.includes('error')) return 'error'
+  return 'warning'
+}
+
+import { onMounted } from 'vue'
+onMounted(loadScheduledTasks)
 </script>
 
 <style scoped>
-.main-content {
-  background: #0d0d14;
-  min-height: 100vh;
-}
-
-.tasks-card {
-  background: #13131f !important;
-  border: 1px solid rgba(255, 255, 255, 0.07) !important;
-  border-radius: 10px !important;
-}
-
-.modern-table :deep(thead tr) {
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.modern-table :deep(th) {
-  font-weight: 600 !important;
-  text-transform: uppercase;
-  font-size: 0.7rem !important;
-  letter-spacing: 0.06em;
-  color: #64748b !important;
-}
-
-.modern-table :deep(tbody tr:hover td) {
-  background-color: rgba(99, 102, 241, 0.05) !important;
-}
-
-.footer-gradient {
-  background: #0d0d14 !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
-  color: #64748b;
-}
+.filter-btn { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.filter-label { font-size: 0.75rem; font-weight: 500; color: #64748b; margin-bottom: 4px; }
+.filter-field { font-size: 0.85rem; }
+.advanced-panel { background: rgba(255,255,255,0.02); }
+.advanced-inner { padding: 14px 16px; }
+.empty-state { display: flex; flex-direction: column; align-items: center; padding: 32px; }
+.text-secondary { color: #64748b; }
 </style>

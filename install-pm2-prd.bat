@@ -1,152 +1,157 @@
 @echo off
+setlocal enabledelayedexpansion
 
-echo ========================================
-echo   NVM + PM2 Production Service Setup
-echo ========================================
+:: ─────────────────────────────────────────────────────────────────────────────
+:: install-pm2-prd.bat  –  Deploy pm2-admin as a persistent Windows service
+::                         via PM2 + NSSM.  Must be run as Administrator.
+::
+:: NSSM makes the PM2 daemon itself a Windows service, so all PM2-managed
+:: processes (including pm2-admin) survive reboots automatically.
+::
+:: To get NSSM: place nssm-2.24.zip (from https://nssm.cc/download) next to
+:: this script, or pre-install nssm.exe to C:\nssm\nssm.exe.
+:: ─────────────────────────────────────────────────────────────────────────────
 
-:: ==============================
-:: REQUIRE ADMIN
-:: ==============================
-net session >nul 2>&1
-IF %errorLevel% NEQ 0 (
-    echo ERROR: กรุณา Run as Administrator
-    pause
-    exit /b 1
-)
+set "ROOT=%~dp0"
+if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 
-:: ==============================
-:: CONFIG
-:: ==============================
-SET SERVICE_NAME=PM2
-SET NVM_ROOT=C:\nvm
-SET NODE_VERSION=24.11.0
-
-SET NSSM_DIR=C:\nssm
-SET NSSM_PATH=C:\nssm\nssm.exe
-
-SET SCRIPT_DIR=%~dp0
-SET LOCAL_NSSM_ZIP=%SCRIPT_DIR%nssm-2.24.zip
-SET EXTRACT_DIR=%SCRIPT_DIR%nssm_extract
-
-SET NPM_GLOBAL=C:\npm-global
-SET NPM_CACHE=C:\npm-cache
-SET PM2_HOME=C:\pm2_home
-:: ==============================
-
-SET NODE_PATH=%NVM_ROOT%\v%NODE_VERSION%
-SET NODE_EXE=%NODE_PATH%\node.exe
-SET NPM_CLI=%NODE_PATH%\node_modules\npm\bin\npm-cli.js
-SET PM2_CLI=%NPM_GLOBAL%\node_modules\pm2\bin\pm2
+for /f %%a in ('echo prompt $E^| cmd /Q') do set "ESC=%%a"
+set "CY=%ESC%[36m" & set "GN=%ESC%[32m" & set "YW=%ESC%[33m"
+set "RD=%ESC%[31m" & set "BD=%ESC%[1m"  & set "RS=%ESC%[0m"
 
 echo.
-echo 1. Validate Node path...
-IF NOT EXIST "%NODE_EXE%" (
-    echo ERROR: Node not found at %NODE_EXE%
-    pause
-    exit /b 1
-)
-echo Node Found.
-
+echo %BD%%CY%pm2-admin ^— Production Deploy (PM2 + NSSM Windows Service)%RS%
 echo.
-echo 2. Install NSSM (Offline mode)...
 
-IF NOT EXIST "%NSSM_PATH%" (
+:: ── Require Administrator ─────────────────────────────────────────────────────
+net session >nul 2>&1 || (
+    echo %RD%[ERROR]%RS% This script must be run as Administrator.
+    echo        Right-click install-pm2-prd.bat ^→ "Run as administrator"
+    pause & exit /b 1
+)
 
-    IF NOT EXIST "%LOCAL_NSSM_ZIP%" (
-        echo ERROR: nssm-2.24.zip not found next to this .bat
-        pause
-        exit /b 1
+:: ── Prerequisites ─────────────────────────────────────────────────────────────
+where node >nul 2>&1 || (
+    echo %RD%[ERROR]%RS% Node.js not found. Run install.bat first.
+    pause & exit /b 1
+)
+echo %GN%[ OK ]%RS%  Node.js & node -v
+
+where pm2 >nul 2>&1
+if errorlevel 1 (
+    echo %YW%[WARN]%RS%  PM2 not found. Installing...
+    call npm install -g pm2 || ( echo %RD%[ERROR]%RS% PM2 install failed. & pause & exit /b 1 )
+)
+echo %GN%[ OK ]%RS%  PM2 & pm2 -v
+
+cd /d "%ROOT%"
+
+if not exist ".env" (
+    echo %RD%[ERROR]%RS% .env not found. Run install.bat first.
+    pause & exit /b 1
+)
+
+if not exist "src\frontend\dist" (
+    echo %YW%[WARN]%RS%  Frontend build not found at src\frontend\dist.
+    set /p "BUILD_NOW=Build now? [y/N]: "
+    if /i "!BUILD_NOW!"=="y" (
+        call "%ROOT%\build.bat"
+    ) else (
+        echo %RD%[ERROR]%RS% Cannot deploy without a frontend build. Run build.bat first.
+        pause & exit /b 1
     )
+)
 
-    IF NOT EXIST "%NSSM_DIR%" mkdir "%NSSM_DIR%"
+:: Read PORT and HOST from .env
+set "PORT=4343"
+set "HOST=127.0.0.1"
+for /f "usebackq tokens=1,* delims==" %%A in ("%ROOT%\.env") do (
+    if "%%A"=="PORT" set "PORT=%%B"
+    if "%%A"=="HOST" set "HOST=%%B"
+)
 
-    IF EXIST "%EXTRACT_DIR%" rd /s /q "%EXTRACT_DIR%"
-    mkdir "%EXTRACT_DIR%"
+set "APP_NAME=pm2-admin"
 
-    echo Extracting NSSM...
-    powershell -Command "Expand-Archive -Path '%LOCAL_NSSM_ZIP%' -DestinationPath '%EXTRACT_DIR%' -Force"
+:: ── Register app with PM2 ─────────────────────────────────────────────────────
+echo.
+echo %CY%Registering '%APP_NAME%' with PM2...%RS%
+pm2 describe %APP_NAME% >nul 2>&1 && (
+    echo %YW%[WARN]%RS%  Existing PM2 process '%APP_NAME%' found — deleting...
+    pm2 delete %APP_NAME%
+)
+pm2 start "%ROOT%\src\app.js" --name "%APP_NAME%" --log-date-format "YYYY-MM-DD HH:mm:ss" --restart-delay 3000 --max-restarts 10
+if errorlevel 1 (
+    echo %RD%[ERROR]%RS% PM2 start failed. Check output above.
+    pause & exit /b 1
+)
+pm2 save
+echo %GN%[ OK ]%RS%  PM2 process saved.
 
-    IF EXIST "%EXTRACT_DIR%\nssm-2.24\win64\nssm.exe" (
-        copy "%EXTRACT_DIR%\nssm-2.24\win64\nssm.exe" "%NSSM_PATH%" /Y >nul
-    ) ELSE (
-        echo ERROR: nssm.exe not found in archive.
-        pause
-        exit /b 1
+:: ── NSSM: make PM2 a Windows Service ─────────────────────────────────────────
+echo.
+echo %CY%Setting up NSSM Windows Service for PM2 auto-start on reboot...%RS%
+
+set "NSSM_DIR=C:\nssm"
+set "NSSM_EXE=%NSSM_DIR%\nssm.exe"
+set "SERVICE_NAME=PM2"
+
+if not exist "%NSSM_EXE%" (
+    set "NSSM_ZIP=%ROOT%\nssm-2.24.zip"
+    if not exist "!NSSM_ZIP!" (
+        echo %YW%[WARN]%RS%  nssm-2.24.zip not found.
+        echo        Download from https://nssm.cc/download, place nssm-2.24.zip
+        echo        next to this script, then re-run.
+        echo.
+        echo %YW%[WARN]%RS%  Windows Service NOT configured — PM2 will not auto-start on reboot.
+        goto :summary
     )
-
-    rd /s /q "%EXTRACT_DIR%"
+    if not exist "%NSSM_DIR%" mkdir "%NSSM_DIR%"
+    echo %CY%[INFO]%RS%  Extracting NSSM...
+    set "EXTRACT=%ROOT%\_nssm_tmp"
+    powershell -Command "Expand-Archive -Path '!NSSM_ZIP!' -DestinationPath '!EXTRACT!' -Force" || (
+        echo %RD%[ERROR]%RS% NSSM extraction failed. & goto :summary
+    )
+    copy "!EXTRACT!\nssm-2.24\win64\nssm.exe" "%NSSM_EXE%" /Y >nul
+    rd /s /q "!EXTRACT!" 2>nul
 )
 
-IF NOT EXIST "%NSSM_PATH%" (
-    echo ERROR: NSSM installation failed.
-    pause
-    exit /b 1
+:: Resolve node.exe and pm2 CLI from current environment
+for /f "delims=" %%N in ('where node 2^>nul') do set "NODE_EXE=%%N" & goto :node_resolved
+:node_resolved
+for /f "delims=" %%G in ('npm root -g 2^>nul') do set "NPM_GLOBAL=%%G"
+set "PM2_CLI=!NPM_GLOBAL!\pm2\bin\pm2"
+
+if not exist "!PM2_CLI!" (
+    echo %YW%[WARN]%RS%  PM2 CLI not found at !PM2_CLI!. Skipping Windows Service setup.
+    goto :summary
 )
 
-echo NSSM Ready.
+:: Remove old service if it exists
+"%NSSM_EXE%" stop %SERVICE_NAME% >nul 2>&1
+"%NSSM_EXE%" remove %SERVICE_NAME% confirm >nul 2>&1
 
-echo.
-echo 3. Create required directories...
-IF NOT EXIST "%NPM_GLOBAL%" mkdir "%NPM_GLOBAL%"
-IF NOT EXIST "%NPM_CACHE%" mkdir "%NPM_CACHE%"
-IF NOT EXIST "%PM2_HOME%" mkdir "%PM2_HOME%"
-
-echo.
-echo 4. Configure npm prefix + cache...
-"%NODE_EXE%" "%NPM_CLI%" config set prefix "%NPM_GLOBAL%" --global
-"%NODE_EXE%" "%NPM_CLI%" config set cache "%NPM_CACHE%" --global
-
-echo.
-echo 5. Install PM2 globally...
-"%NODE_EXE%" "%NPM_CLI%" install -g pm2
-
-IF NOT EXIST "%PM2_CLI%" (
-    echo ERROR: PM2 installation failed.
-    pause
-    exit /b 1
-)
-
-echo PM2 Installed.
-
-echo.
-echo 6. Remove old service if exists...
-"%NSSM_PATH%" stop %SERVICE_NAME% >nul 2>&1
-"%NSSM_PATH%" remove %SERVICE_NAME% confirm >nul 2>&1
-
-echo.
-echo 7. Install Windows service...
-"%NSSM_PATH%" install %SERVICE_NAME% "%NODE_EXE%" "%PM2_CLI%" resurrect
-
-echo.
-echo 8. Configure service environment...
-"%NSSM_PATH%" set %SERVICE_NAME% AppDirectory C:\
-
-"%NSSM_PATH%" set %SERVICE_NAME% AppEnvironmentExtra PM2_HOME=%PM2_HOME%
-"%NSSM_PATH%" set %SERVICE_NAME% AppEnvironmentExtra NODE_ENV=production
-"%NSSM_PATH%" set %SERVICE_NAME% AppEnvironmentExtra PATH=%NODE_PATH%;%NPM_GLOBAL%
-
-"%NSSM_PATH%" set %SERVICE_NAME% Start SERVICE_AUTO_START
-"%NSSM_PATH%" set %SERVICE_NAME% AppRestartDelay 5000
-"%NSSM_PATH%" set %SERVICE_NAME% AppThrottle 1500
-
-echo.
-echo 9. Start service...
+:: Install and start service
+"%NSSM_EXE%" install %SERVICE_NAME% "!NODE_EXE!" "!PM2_CLI!" resurrect
+"%NSSM_EXE%" set %SERVICE_NAME% AppDirectory "%ROOT%"
+"%NSSM_EXE%" set %SERVICE_NAME% Start SERVICE_AUTO_START
+"%NSSM_EXE%" set %SERVICE_NAME% AppRestartDelay 5000
+"%NSSM_EXE%" set %SERVICE_NAME% AppThrottle 1500
 net start %SERVICE_NAME%
-
-IF %errorLevel% NEQ 0 (
-    echo ERROR: Service failed to start.
-    pause
-    exit /b 1
+if errorlevel 1 (
+    echo %YW%[WARN]%RS%  Windows Service failed to start. PM2 is running but may not survive reboot.
+) else (
+    echo %GN%[ OK ]%RS%  Windows Service '%SERVICE_NAME%' installed and started.
 )
 
+:summary
 echo.
-echo ========================================
-echo   INSTALL COMPLETED SUCCESSFULLY
-echo ========================================
+echo %GN%[ OK ]%RS%  pm2-admin is running!
+echo   URL    : %BD%http://!HOST!:!PORT!%RS%
+echo   Logs   : %BD%pm2 logs %APP_NAME%%RS%
+echo   Status : %BD%pm2 status%RS%
+echo   Stop   : %BD%pm2 stop %APP_NAME%%RS%
+echo   Remove : %BD%pm2 delete %APP_NAME%%RS%
 echo.
-echo Next step:
-echo   set PM2_HOME=%PM2_HOME%
-echo   pm2 start app.js
-echo   pm2 save
-echo.
+
+start "" "http://localhost:!PORT!"
 pause
