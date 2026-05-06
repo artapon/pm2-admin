@@ -2,6 +2,8 @@
 
 A modern, secure web interface for managing PM2 processes. Runs on **Linux** and **Windows** (including Windows Server). A self-hosted alternative to PM2 Plus.
 
+![PM2 Admin Dashboard](screenshot.png)
+
 ## Features
 
 - **Process Dashboard** — View status, CPU, memory, uptime, and restarts for all PM2 apps at a glance. PM2 plugin processes are filtered into a separate Plugins page.
