@@ -2,14 +2,14 @@
 setlocal enabledelayedexpansion
 
 :: ─────────────────────────────────────────────────────────────────────────────
-:: start.bat  –  Start pm2-admin.
+:: scripts\start.bat  –  Start pm2-admin.
 ::               If PM2 is available: starts as a PM2 daemon process.
 ::               Otherwise: starts in the foreground with Node.js.
-::               Use install-pm2-prd.bat for a persistent Windows Service.
+::               Use scripts\install-pm2-prd.bat for a persistent Windows Service.
 :: ─────────────────────────────────────────────────────────────────────────────
 
-set "ROOT=%~dp0"
-if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
+:: ROOT = project root (parent of the scripts\ folder this file lives in)
+for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 
 for /f %%a in ('echo prompt $E^| cmd /Q') do set "ESC=%%a"
 set "CY=%ESC%[36m" & set "GN=%ESC%[32m" & set "YW=%ESC%[33m"
@@ -19,17 +19,17 @@ echo.
 echo %BD%%CY%pm2-admin ^— Start%RS%
 echo.
 
-where node >nul 2>&1 || (echo %RD%[ERROR]%RS% Node.js not found. Run install.bat first. & pause & exit /b 1)
+where node >nul 2>&1 || (echo %RD%[ERROR]%RS% Node.js not found. Run scripts\install.bat first. & pause & exit /b 1)
 
 cd /d "%ROOT%"
 
-if not exist ".env" (echo %RD%[ERROR]%RS% .env not found. Run install.bat first. & pause & exit /b 1)
+if not exist ".env" (echo %RD%[ERROR]%RS% .env not found. Run scripts\install.bat first. & pause & exit /b 1)
 
 if not exist "src\frontend\dist" (
     echo %YW%[WARN]%RS%  Frontend build not found at src\frontend\dist.
     set /p "BUILD_NOW=Build now? [y/N]: "
     if /i "!BUILD_NOW!"=="y" (
-        call "%ROOT%\build.bat"
+        call "%~dp0build.bat"
     ) else (
         echo %RD%[ERROR]%RS% Cannot start without a frontend build.
         pause & exit /b 1

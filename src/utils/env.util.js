@@ -27,7 +27,7 @@ const getEnvFileRawBackupContent = async (wd)=>{
 }
 
 const parseEnv = (envFileContent) => {
-    const envLines = envFileContent.split('\n');
+    const envLines = envFileContent.split(/\r?\n/);
     const envObject = {};
 
     for (const line of envLines) {

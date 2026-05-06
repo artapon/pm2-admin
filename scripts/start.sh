@@ -2,9 +2,9 @@
 # start.sh — Start pm2-admin.
 #            If PM2 is available: starts as a PM2 daemon process.
 #            Otherwise: starts in the foreground with Node.js.
-#            Use install-pm2-prd.sh for persistent auto-start on reboot.
+#            Use scripts/install-pm2-prd.sh for persistent auto-start on reboot.
 set -euo pipefail
-source "$(cd "$(dirname "$0")" && pwd)/scripts/_common.sh"
+source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
 
 header "pm2-admin — Start"
 
@@ -12,14 +12,14 @@ check_node_version 16
 
 cd "${PROJECT_ROOT}"
 
-[[ -f ".env" ]] || die ".env not found. Run ./install.sh first."
+[[ -f ".env" ]] || die ".env not found. Run scripts/install.sh first."
 
 DIST="${PROJECT_ROOT}/src/frontend/dist"
 if [[ ! -d "${DIST}" ]]; then
     warn "Frontend build not found at ${DIST}."
     read -rp "Build now? [y/N] " answer
     if [[ "${answer,,}" == "y" ]]; then
-        "${PROJECT_ROOT}/build.sh"
+        "${PROJECT_ROOT}/scripts/build.sh"
     else
         die "Cannot start without a frontend build."
     fi

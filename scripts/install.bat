@@ -2,11 +2,11 @@
 setlocal enabledelayedexpansion
 
 :: ─────────────────────────────────────────────────────────────────────────────
-:: install.bat  –  Install all dependencies and create .env
+:: scripts\install.bat  –  Install all dependencies and create .env
 :: ─────────────────────────────────────────────────────────────────────────────
 
-set "ROOT=%~dp0"
-if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
+:: ROOT = project root (parent of the scripts\ folder this file lives in)
+for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 
 :: ANSI colours (Windows 10 1511+)
 for /f %%a in ('echo prompt $E^| cmd /Q') do set "ESC=%%a"
@@ -68,7 +68,7 @@ echo.
 echo %GN%Installation complete!%RS%
 echo   Next steps:
 echo   1. Edit %BD%.env%RS% if needed
-echo   2. Run %BD%build.bat%RS% to build the frontend
-echo   3. Run %BD%start.bat%RS% ^(dev^) or %BD%install-pm2-prd.bat%RS% ^(production^)
+echo   2. Run %BD%scripts\build.bat%RS% to build the frontend
+echo   3. Run %BD%scripts\start.bat%RS% ^(dev^) or %BD%scripts\install-pm2-prd.bat%RS% ^(production^)
 echo.
 pause

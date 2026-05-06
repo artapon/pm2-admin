@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build.sh — Build the Vue 3 frontend into src/frontend/dist.
 set -euo pipefail
-source "$(cd "$(dirname "$0")" && pwd)/scripts/_common.sh"
+source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
 
 header "pm2-admin — Build Frontend"
 

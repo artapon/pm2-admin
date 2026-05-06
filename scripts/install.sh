@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install.sh — Install all dependencies and create .env for pm2-admin.
 set -euo pipefail
-source "$(cd "$(dirname "$0")" && pwd)/scripts/_common.sh"
+source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
 
 header "pm2-admin — Install"
 
@@ -55,6 +55,6 @@ echo ""
 success "Installation complete!"
 echo -e "  Next steps:"
 echo -e "  1. Edit ${BOLD}.env${RESET} if needed"
-echo -e "  2. Run ${BOLD}./build.sh${RESET} to build the frontend"
-echo -e "  3. Run ${BOLD}./start.sh${RESET} (dev) or ${BOLD}./install-pm2-prd.sh${RESET} (production)"
+echo -e "  2. Run ${BOLD}scripts/build.sh${RESET} to build the frontend"
+echo -e "  3. Run ${BOLD}scripts/start.sh${RESET} (dev) or ${BOLD}scripts/install-pm2-prd.sh${RESET} (production)"
 echo ""

@@ -9,6 +9,24 @@ const fs = require('fs');
 const path = require('path');
 const si = require('systeminformation');
 
+// Strict validators — applied to user-controlled inputs that flow into PM2/git/fs ops.
+const APP_NAME_RE = /^[A-Za-z0-9_.:\-]{1,128}$/;
+const BRANCH_RE = /^[A-Za-z0-9._\-\/]{1,128}$/;
+// Only allow a small whitelist of safe Node CLI flags, no values, no paths, no --require/--inspect/etc.
+const NODE_ARG_RE = /^--(max-old-space-size=\d{1,5}|use-strict|no-deprecation|no-warnings|throw-deprecation|preserve-symlinks|preserve-symlinks-main)$/;
+const isValidAppName = (n) => typeof n === 'string' && APP_NAME_RE.test(n);
+const isRoot = (req) => req.session && req.session.role === 'root';
+const validateNodeArgs = (raw) => {
+    if (raw === undefined || raw === null || raw === '') return '';
+    if (typeof raw !== 'string') throw new Error('Invalid nodeArgs');
+    if (raw.length > 256) throw new Error('Invalid nodeArgs');
+    const tokens = raw.trim().split(/\s+/);
+    for (const t of tokens) {
+        if (!NODE_ARG_RE.test(t)) throw new Error(`Disallowed node argument: ${t}`);
+    }
+    return tokens.join(' ');
+};
+
 const getAllApps = async (req, res) => {
     try {
         const apps = await listApps();
@@ -116,6 +134,9 @@ const getDashboard = async (req, res) => {
 const getApp = async (req, res) => {
     try {
         const { appName } = req.params;
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
         let app = await describeApp(appName);
 
         if (!app) {
@@ -141,8 +162,14 @@ const getApp = async (req, res) => {
         app.port_https = portHTTPS;
         app.git_branch = await getCurrentGitBranch(app.pm2_env_cwd);
         app.git_commit = await getCurrentGitCommit(app.pm2_env_cwd);
-        app.env_file_raw = await getEnvFileRawContent(app.pm2_env_cwd);
-        app.env_file_raw_backup = await getEnvFileRawBackupContent(app.pm2_env_cwd);
+        // Only expose .env contents to root — they typically contain DB passwords/API keys
+        if (isRoot(req)) {
+            app.env_file_raw = await getEnvFileRawContent(app.pm2_env_cwd);
+            app.env_file_raw_backup = await getEnvFileRawBackupContent(app.pm2_env_cwd);
+        } else {
+            app.env_file_raw = null;
+            app.env_file_raw_backup = null;
+        }
 
         const [stdout, stderr] = await Promise.all([
             readLogsReverse({ filePath: app.pm_out_log_path }),
@@ -185,6 +212,9 @@ const getAppLogs = async (req, res) => {
         const { appName, logType } = req.params;
         const { nextKey } = req.query;
 
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
         if (logType !== 'stdout' && logType !== 'stderr') {
             return res.status(400).json({ success: false, error: 'Log Type must be stdout or stderr' });
         }
@@ -207,6 +237,9 @@ const getAppLogs = async (req, res) => {
 const reloadAppAction = async (req, res) => {
     try {
         const { appName } = req.params;
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
         const apps = await reloadApp(appName);
 
         if (Array.isArray(apps) && apps.length > 0) {
@@ -222,6 +255,9 @@ const reloadAppAction = async (req, res) => {
 const restartAppAction = async (req, res) => {
     try {
         const { appName } = req.params;
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
         const apps = await restartApp(appName);
 
         if (Array.isArray(apps) && apps.length > 0) {
@@ -237,6 +273,9 @@ const restartAppAction = async (req, res) => {
 const stopAppAction = async (req, res) => {
     try {
         const { appName } = req.params;
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
         const apps = await stopApp(appName);
 
         if (Array.isArray(apps) && apps.length > 0) {
@@ -252,6 +291,9 @@ const stopAppAction = async (req, res) => {
 const flushAppLogs = async (req, res) => {
     try {
         const { appName } = req.params;
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
         await flushApp(appName);
         res.json({ success: true, message: `Logs for ${appName} flushed successfully` });
     } catch (error) {
@@ -264,8 +306,14 @@ const updateAppEnv = async (req, res) => {
         const { appName } = req.params;
         const { env_content } = req.body;
 
-        if (!env_content) {
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
+        if (typeof env_content !== 'string' || !env_content) {
             return res.status(400).json({ success: false, error: 'env_content is required' });
+        }
+        if (env_content.length > 64 * 1024) {
+            return res.status(413).json({ success: false, error: '.env content too large' });
         }
 
         const app = await describeApp(appName);
@@ -285,6 +333,9 @@ const updateAppEnv = async (req, res) => {
 const deleteAppAction = async (req, res) => {
     try {
         const { appName } = req.params;
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
         const apps = await deleteApp(appName);
 
         if (Array.isArray(apps) && apps.length > 0) {
@@ -302,8 +353,18 @@ const restartAppWithRenameAction = async (req, res) => {
         const { appName } = req.params;
         const { newAppName, nodeArgs } = req.body;
 
-        if (!newAppName) {
-            return res.status(400).json({ success: false, error: 'newAppName is required' });
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
+        if (!isValidAppName(newAppName)) {
+            return res.status(400).json({ success: false, error: 'Invalid new app name (alphanumeric, _ . : - only)' });
+        }
+
+        let safeNodeArgs;
+        try {
+            safeNodeArgs = validateNodeArgs(nodeArgs);
+        } catch (e) {
+            return res.status(400).json({ success: false, error: e.message });
         }
 
         const app = await describeApp(appName);
@@ -311,7 +372,7 @@ const restartAppWithRenameAction = async (req, res) => {
             return res.status(404).json({ success: false, error: 'App not found' });
         }
 
-        const apps = await restartAppWithRename(appName, newAppName, app.exec_path, app.pm2_env_cwd, nodeArgs);
+        const apps = await restartAppWithRename(appName, newAppName, app.exec_path, app.pm2_env_cwd, safeNodeArgs);
 
         if (Array.isArray(apps) && apps.length > 0) {
             res.json({ success: true, message: `App restarted successfully with new name: ${newAppName}` });
@@ -328,8 +389,17 @@ const gitPullApp = async (req, res) => {
         const { appName } = req.params;
         const { username, password, branch = 'master' } = req.body;
 
-        if (!username || !password) {
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
+        if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
             return res.status(400).json({ success: false, error: 'username and password are required' });
+        }
+        if (username.length > 200 || password.length > 500) {
+            return res.status(400).json({ success: false, error: 'username/password too long' });
+        }
+        if (typeof branch !== 'string' || !BRANCH_RE.test(branch)) {
+            return res.status(400).json({ success: false, error: 'Invalid branch' });
         }
 
         const app = await describeApp(appName);

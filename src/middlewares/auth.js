@@ -18,13 +18,8 @@ const isRoot = (req, res, next) => {
         req.session.role = 'root';
     }
 
-    console.log(`Checking root role for user: ${req.session.username}, role: ${role}`);
-
     if (!req.session.isAuthenticated || role !== 'root') {
-        return res.status(403).json({
-            success: false,
-            error: `Forbidden: Requires Root role (Current: ${role || 'none'})`
-        });
+        return res.status(403).json({ success: false, error: 'Forbidden: root role required' });
     }
     next();
 };

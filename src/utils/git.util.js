@@ -55,6 +55,11 @@ const getCurrentGitCommit = async (cwd) => {
     }
 };
 
+// Strip embedded credentials (e.g. https://user:pass@host) from text before logging
+const redact = (s) => typeof s === 'string'
+    ? s.replace(/(https?:\/\/)([^\s:@\/]+):([^\s@\/]+)@/gi, '$1***:***@')
+    : s;
+
 const gitPull = async (appName, cwd, username, password, branch) => {
     try {
         if (branch && !BRANCH_RE.test(branch)) {
@@ -62,19 +67,20 @@ const gitPull = async (appName, cwd, username, password, branch) => {
         }
 
         const remoteOut = await safeExecFile('git', ['config', '--get', 'remote.origin.url'], { cwd });
-        let remote = remoteOut.replace('https://', '').replace('\n', '').trim();
-        remote = `https://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${remote}`;
+        let remoteHost = remoteOut.replace('https://', '').trim();
+        const authedRemote = `https://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${remoteHost}`;
 
         console.log(appName + ' : git stash pop');
         await safeExecFile('git', ['stash', 'pop'], { cwd }).catch(() => {});
 
         const targetBranch = branch || 'master';
         console.log(appName + ' : git pull ' + targetBranch);
-        const stdout = await safeExecFile('git', ['pull', remote, targetBranch], { cwd });
-        console.log(appName + ' : ' + stdout.replace('\n', ''));
+        const stdout = await safeExecFile('git', ['pull', authedRemote, targetBranch], { cwd });
+        console.log(appName + ' : ' + redact(stdout).trim());
         return stdout.trim();
     } catch (err) {
-        console.error(appName + ' gitPull error:', err.message);
+        // Never log err.message directly — could contain the credential-bearing remote
+        console.error(appName + ' gitPull error:', redact(err.message));
         return null;
     }
 };
@@ -91,6 +97,17 @@ const gitClone = async (gitUrl, gitUsername, gitPassword, tofolder = '', branch 
             throw new Error('Invalid folder name — only alphanumeric, dots, dashes, underscores allowed');
         }
 
+        // Only allow https:// git URLs — block file://, ssh://, http:// (downgrade), git://
+        if (typeof gitUrl !== 'string' || !/^https:\/\/[^\s'"`$]+$/.test(gitUrl) || gitUrl.length > 1024) {
+            throw new Error('Invalid git URL — only https:// allowed');
+        }
+        if (typeof gitUsername !== 'string' || typeof gitPassword !== 'string' || !gitUsername || !gitPassword) {
+            throw new Error('Missing credentials');
+        }
+        if (gitUsername.length > 200 || gitPassword.length > 500) {
+            throw new Error('Credential too long');
+        }
+
         const repositoryName = gitUrl.split('/').pop().replace('.git', '');
         const cwd = path.resolve(__dirname, '../../..');
         const username = encodeURIComponent(gitUsername);
@@ -99,10 +116,12 @@ const gitClone = async (gitUrl, gitUsername, gitPassword, tofolder = '', branch 
 
         const appDirectory = path.join(cwd, tofolder || repositoryName);
 
-        // Prevent path traversal
+        // Defence-in-depth path traversal check using path.relative — rejects any
+        // path that resolves outside cwd, regardless of separator/symlinks.
         const resolvedDir = path.resolve(appDirectory);
         const resolvedCwd = path.resolve(cwd);
-        if (!resolvedDir.startsWith(resolvedCwd + path.sep) && resolvedDir !== resolvedCwd) {
+        const rel = path.relative(resolvedCwd, resolvedDir);
+        if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
             throw new Error('Invalid clone target directory');
         }
 

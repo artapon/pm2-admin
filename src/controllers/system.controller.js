@@ -4,9 +4,14 @@ const si = require('systeminformation');
 const path = require("path");
 const fs = require('fs');
 const os = require('os');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+const IS_WINDOWS = process.platform === 'win32';
+const SHARE_NAME_RE = /^[A-Za-z0-9_.\-$]{1,80}$/;
+const LOGROTATE_VALUE_RE = /^[A-Za-z0-9_.:\-+\/ *]{0,128}$/;
 
 // Cache platform detection — resolved once on first use
 let _isWindows = null;
@@ -255,7 +260,7 @@ const getSharedFolders = async (req, res) => {
 
         if (isWindows) {
             try {
-                const { stdout } = await execAsync('net share', { windowsHide: true, shell: false });
+                const { stdout } = await execAsync('net share', { windowsHide: true, shell: true });
                 const lines = stdout.split('\n');
                 let dataStarted = false;
 
@@ -319,9 +324,11 @@ const getSharedFolders = async (req, res) => {
             try {
                 const { stdout } = await execAsync('net usershare list 2>/dev/null', { shell: true });
                 if (stdout) {
-                    const shareNames = stdout.trim().split(/\s+/);
+                    // Whitelist names — prevents command injection via crafted share names
+                    const shareNames = stdout.trim().split(/\s+/).filter(n => SHARE_NAME_RE.test(n));
                     const results = await Promise.allSettled(
-                        shareNames.map(name => execAsync(`net usershare info "${name}"`, { shell: true }))
+                        // execFile (no shell) + arg array — safe even if a name slipped through
+                        shareNames.map(name => execFileAsync('net', ['usershare', 'info', name]))
                     );
                     results.forEach((result, idx) => {
                         if (result.status === 'fulfilled') {
@@ -352,7 +359,7 @@ const getScheduledTasks = async (req, res) => {
 
         if (isWindows) {
             try {
-                const { stdout } = await execAsync('schtasks /query /fo csv /v', { windowsHide: true, shell: false });
+                const { stdout } = await execAsync('schtasks /query /fo csv /v', { windowsHide: true, shell: true });
                 const lines = stdout.split('\n').filter(line => line.trim());
 
                 if (lines.length > 1) {
@@ -393,7 +400,7 @@ const getScheduledTasks = async (req, res) => {
                                     status: 'Active',
                                     lastRunTime: '-',
                                     lastResult: '-',
-                                    author: process.env.USER || 'N/A',
+                                    author: process.env.USER || process.env.USERNAME || 'N/A',
                                     taskToRun: parts.slice(5).join(' ')
                                 });
                             }
@@ -456,11 +463,19 @@ const setLogRotateConfig = async (req, res) => {
         if (!LOG_ROTATE_KEYS.includes(key)) {
             return res.status(400).json({ success: false, error: 'Invalid configuration key' });
         }
-        const safeValue = String(value).replace(/"/g, '\\"');
-        await execAsync(`pm2 set pm2-logrotate:${key} "${safeValue}"`, { shell: true, windowsHide: true });
+        const strValue = String(value ?? '');
+        if (!LOGROTATE_VALUE_RE.test(strValue)) {
+            return res.status(400).json({ success: false, error: 'Invalid configuration value' });
+        }
+        // Use execFile + arg array — no shell interpolation, safe from injection.
+        // shell: IS_WINDOWS only resolves pm2.cmd on Windows; args are still passed as a vector.
+        await execFileAsync('pm2', ['set', `pm2-logrotate:${key}`, strValue], {
+            shell: IS_WINDOWS,
+            windowsHide: true
+        });
         res.json({ success: true, message: `pm2-logrotate:${key} updated` });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Failed to update log rotate config' });
     }
 };
 

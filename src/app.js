@@ -2,6 +2,7 @@
 
 const express = require('express');
 const session = require('express-session');
+const helmet = require('helmet');
 const path = require('path');
 const config = require('./config');
 const { setEnvDataSync } = require('./utils/env.util');
@@ -20,22 +21,48 @@ if (!config.APP_SESSION_SECRET) {
 
 const app = express();
 
+// trust proxy: required for `secure` cookie + correct rate-limit IPs behind a reverse proxy
 app.set('trust proxy', 1);
+// Hide Express fingerprint
+app.disable('x-powered-by');
 
-// Security headers
-app.use((req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
-    res.removeHeader('X-Powered-By');
-    next();
-});
+const isProd = process.env.NODE_ENV === 'production';
+// Allow operators to force secure cookies / HSTS even when NODE_ENV is unset behind TLS
+const forceHttps = process.env.FORCE_HTTPS === 'true';
+const useSecureCookie = isProd || forceHttps;
 
-// Body parsing with size limit
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+// helmet — comprehensive security headers (CSP, HSTS, COOP, X-Frame-Options, etc.)
+// CSP is tuned for a Vite-built Vue SPA: 'self' for scripts, 'unsafe-inline' allowed for
+// styles only (Vuetify injects runtime styles), no eval, no remote scripts.
+app.use(helmet({
+    contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", 'data:', 'blob:'],
+            fontSrc: ["'self'", 'data:'],
+            connectSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            frameAncestors: ["'none'"],
+            baseUri: ["'self'"],
+            formAction: ["'self'"],
+            upgradeInsecureRequests: useSecureCookie ? [] : null,
+        },
+    },
+    crossOriginEmbedderPolicy: false, // SPA assets break otherwise; mTLS not relied upon here
+    crossOriginOpenerPolicy: { policy: 'same-origin' },
+    crossOriginResourcePolicy: { policy: 'same-origin' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    hsts: useSecureCookie
+        ? { maxAge: 63072000, includeSubDomains: true, preload: true }
+        : false,
+}));
+
+// Body parsing — keep limits tight; .env updates have their own per-route 64KB cap
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: false, limit: '100kb' }));
 
 // Session
 app.use(session({
@@ -44,20 +71,54 @@ app.use(session({
     store: new SQLiteStore(),
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         httpOnly: true,
         sameSite: 'strict',
-        rolling: true,
+        secure: useSecureCookie,
+        path: '/',
     }
 }));
 
+// Cache control for API responses — never cache authenticated API data
+app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
+    next();
+});
+
 // Serve frontend static files
-app.use(express.static(path.join(__dirname, 'frontend/dist')));
+app.use(express.static(path.join(__dirname, 'frontend', 'dist'), {
+    maxAge: isProd ? '7d' : 0,
+    etag: true,
+    setHeaders: (res, filePath) => {
+        // index.html must never be cached aggressively
+        if (path.basename(filePath) === 'index.html') {
+            res.setHeader('Cache-Control', 'no-store');
+        }
+    }
+}));
 
 // Routes
 const router = require('./routes');
 app.use(router);
+
+// 404 for /api with JSON; SPA already handled by routes
+app.use('/api', (req, res) => {
+    res.status(404).json({ success: false, error: 'Not found' });
+});
+
+// Centralized error handler — never leak stack traces or raw error messages
+app.use((err, req, res, next) => {
+    // express-rate-limit and similar may set statusCode
+    const status = err.status || err.statusCode || 500;
+    if (!isProd) console.error('Unhandled error:', err);
+    if (req.originalUrl.startsWith('/api')) {
+        return res.status(status).json({ success: false, error: status === 500 ? 'Internal server error' : err.message });
+    }
+    res.status(status).send(status === 500 ? 'Internal server error' : err.message);
+});
 
 app.listen(config.PORT, config.HOST, () => {
     console.log(`Application started at http://${config.HOST}:${config.PORT}`);

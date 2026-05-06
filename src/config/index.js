@@ -8,7 +8,7 @@ const config = {
     APP_USERNAME: process.env.APP_USERNAME || null,
     DEFAULTS: {
         LINES_PER_REQUEST: 50,
-        BCRYPT_HASH_ROUNDS: 10,
+        BCRYPT_HASH_ROUNDS: 12,
     }
 }
 

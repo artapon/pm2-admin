@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { describeApp } = require('../providers/pm2/api');
-const { isAuthenticated } = require('../middlewares/auth');
+const { isAuthenticated, isRoot } = require('../middlewares/auth');
 const fs = require('fs');
 const path = require('path');
 
@@ -10,9 +10,11 @@ const apiRouter = require('./api');
 // Mount API router
 router.use('/api', apiRouter);
 
+const APP_NAME_RE = /^[A-Za-z0-9_.:\-]{1,128}$/;
+
 // Serve SPA index.html
 const serveIndex = (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+    res.sendFile(path.join(__dirname, '..', 'frontend', 'dist', 'index.html'));
 };
 
 // SPA routes
@@ -25,42 +27,54 @@ router.get('/git-clone', serveIndex);
 router.get('/users', serveIndex);
 router.get('/scheduled-tasks', serveIndex);
 
-// Log download routes
-router.get('/apps/:appName/outlog/download', isAuthenticated, async (req, res) => {
+// Confirms a candidate file path is inside an allowed app cwd. Defends against
+// PM2 returning a manipulated path or symlink-based escape.
+function isPathInside(filePath, allowedDir) {
+    const f = path.resolve(filePath);
+    const d = path.resolve(allowedDir);
+    const rel = path.relative(d, f);
+    return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+// Log downloads — root only (logs frequently contain secrets / connection strings)
+router.get('/apps/:appName/outlog/download', isAuthenticated, isRoot, async (req, res) => {
     try {
         const { appName } = req.params;
+        if (!APP_NAME_RE.test(appName)) return res.status(400).json({ error: 'Invalid app name' });
         const app = await describeApp(appName);
         if (!app) return res.status(404).json({ error: 'App not found' });
         const fileName = app.pm_out_log_path;
-        if (fs.existsSync(fileName)) {
+        if (fileName && fs.existsSync(fileName)) {
             res.download(fileName);
         } else {
             res.status(400).json({ error: 'Requested file not found on server' });
         }
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    } catch {
+        res.status(500).json({ error: 'Failed to download log' });
     }
 });
 
-router.get('/apps/:appName/errorlog/download', isAuthenticated, async (req, res) => {
+router.get('/apps/:appName/errorlog/download', isAuthenticated, isRoot, async (req, res) => {
     try {
         const { appName } = req.params;
+        if (!APP_NAME_RE.test(appName)) return res.status(400).json({ error: 'Invalid app name' });
         const app = await describeApp(appName);
         if (!app) return res.status(404).json({ error: 'App not found' });
         const fileName = app.pm_err_log_path;
-        if (fs.existsSync(fileName)) {
+        if (fileName && fs.existsSync(fileName)) {
             res.download(fileName);
         } else {
             res.status(400).json({ error: 'Requested file not found on server' });
         }
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    } catch {
+        res.status(500).json({ error: 'Failed to download log' });
     }
 });
 
-router.get('/apps/:appName/customlog/download', isAuthenticated, async (req, res) => {
+router.get('/apps/:appName/customlog/download', isAuthenticated, isRoot, async (req, res) => {
     try {
         const { appName } = req.params;
+        if (!APP_NAME_RE.test(appName)) return res.status(400).json({ error: 'Invalid app name' });
         const app = await describeApp(appName);
         if (!app) return res.status(404).json({ error: 'App not found' });
 
@@ -77,13 +91,16 @@ router.get('/apps/:appName/customlog/download', isAuthenticated, async (req, res
         if (!logFiles[0]) return res.status(404).json({ error: 'No log files found' });
 
         const fileName = path.join(customLogPath, logFiles[0].file);
+        if (!isPathInside(fileName, customLogPath)) {
+            return res.status(400).json({ error: 'Invalid log path' });
+        }
         if (fs.existsSync(fileName)) {
             res.download(fileName);
         } else {
             res.status(400).json({ error: 'Requested file not found on server' });
         }
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    } catch {
+        res.status(500).json({ error: 'Failed to download log' });
     }
 });
 

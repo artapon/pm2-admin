@@ -2,18 +2,19 @@
 setlocal enabledelayedexpansion
 
 :: ─────────────────────────────────────────────────────────────────────────────
-:: install-pm2-prd.bat  –  Deploy pm2-admin as a persistent Windows service
-::                         via PM2 + NSSM.  Must be run as Administrator.
+:: scripts\install-pm2-prd.bat  –  Deploy pm2-admin as a persistent Windows
+::                                  service via PM2 + NSSM.
+::                                  Must be run as Administrator.
 ::
 :: NSSM makes the PM2 daemon itself a Windows service, so all PM2-managed
 :: processes (including pm2-admin) survive reboots automatically.
 ::
-:: To get NSSM: place nssm-2.24.zip (from https://nssm.cc/download) next to
-:: this script, or pre-install nssm.exe to C:\nssm\nssm.exe.
+:: To get NSSM: place nssm-2.24.zip (from https://nssm.cc/download) in the
+:: project root folder, or pre-install nssm.exe to C:\nssm\nssm.exe.
 :: ─────────────────────────────────────────────────────────────────────────────
 
-set "ROOT=%~dp0"
-if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
+:: ROOT = project root (parent of the scripts\ folder this file lives in)
+for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 
 for /f %%a in ('echo prompt $E^| cmd /Q') do set "ESC=%%a"
 set "CY=%ESC%[36m" & set "GN=%ESC%[32m" & set "YW=%ESC%[33m"
@@ -26,13 +27,13 @@ echo.
 :: ── Require Administrator ─────────────────────────────────────────────────────
 net session >nul 2>&1 || (
     echo %RD%[ERROR]%RS% This script must be run as Administrator.
-    echo        Right-click install-pm2-prd.bat ^→ "Run as administrator"
+    echo        Right-click scripts\install-pm2-prd.bat ^→ "Run as administrator"
     pause & exit /b 1
 )
 
 :: ── Prerequisites ─────────────────────────────────────────────────────────────
 where node >nul 2>&1 || (
-    echo %RD%[ERROR]%RS% Node.js not found. Run install.bat first.
+    echo %RD%[ERROR]%RS% Node.js not found. Run scripts\install.bat first.
     pause & exit /b 1
 )
 echo %GN%[ OK ]%RS%  Node.js & node -v
@@ -47,7 +48,7 @@ echo %GN%[ OK ]%RS%  PM2 & pm2 -v
 cd /d "%ROOT%"
 
 if not exist ".env" (
-    echo %RD%[ERROR]%RS% .env not found. Run install.bat first.
+    echo %RD%[ERROR]%RS% .env not found. Run scripts\install.bat first.
     pause & exit /b 1
 )
 
@@ -55,9 +56,9 @@ if not exist "src\frontend\dist" (
     echo %YW%[WARN]%RS%  Frontend build not found at src\frontend\dist.
     set /p "BUILD_NOW=Build now? [y/N]: "
     if /i "!BUILD_NOW!"=="y" (
-        call "%ROOT%\build.bat"
+        call "%~dp0build.bat"
     ) else (
-        echo %RD%[ERROR]%RS% Cannot deploy without a frontend build. Run build.bat first.
+        echo %RD%[ERROR]%RS% Cannot deploy without a frontend build. Run scripts\build.bat first.
         pause & exit /b 1
     )
 )
@@ -100,7 +101,7 @@ if not exist "%NSSM_EXE%" (
     if not exist "!NSSM_ZIP!" (
         echo %YW%[WARN]%RS%  nssm-2.24.zip not found.
         echo        Download from https://nssm.cc/download, place nssm-2.24.zip
-        echo        next to this script, then re-run.
+        echo        in the project root folder, then re-run.
         echo.
         echo %YW%[WARN]%RS%  Windows Service NOT configured — PM2 will not auto-start on reboot.
         goto :summary

@@ -3,7 +3,7 @@
 #                      Run once to deploy; PM2 will restart it automatically
 #                      after reboots (once you apply the startup hook below).
 set -euo pipefail
-source "$(cd "$(dirname "$0")" && pwd)/scripts/_common.sh"
+source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
 
 header "pm2-admin — Production Deploy via PM2"
 
@@ -13,16 +13,16 @@ require_cmd pm2 "Install with: npm install -g pm2"
 cd "${PROJECT_ROOT}"
 
 # ── Guards ────────────────────────────────────────────────────────────────────
-[[ -f ".env" ]] || die ".env not found. Run ./install.sh first."
+[[ -f ".env" ]] || die ".env not found. Run scripts/install.sh first."
 
 DIST="${PROJECT_ROOT}/src/frontend/dist"
 if [[ ! -d "${DIST}" ]]; then
     warn "Frontend build not found at ${DIST}."
     read -rp "Build now? [y/N] " answer
     if [[ "${answer,,}" == "y" ]]; then
-        "${PROJECT_ROOT}/build.sh"
+        "${PROJECT_ROOT}/scripts/build.sh"
     else
-        die "Cannot deploy without a frontend build. Run ./build.sh first."
+        die "Cannot deploy without a frontend build. Run scripts/build.sh first."
     fi
 fi
 
