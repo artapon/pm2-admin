@@ -468,11 +468,12 @@ const setLogRotateConfig = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid configuration value' });
         }
         // Use execFile + arg array — no shell interpolation, safe from injection.
-        // shell: IS_WINDOWS only resolves pm2.cmd on Windows; args are still passed as a vector.
-        await execFileAsync('pm2', ['set', `pm2-logrotate:${key}`, strValue], {
-            shell: IS_WINDOWS,
-            windowsHide: true
-        });
+        // On Windows, wrap in cmd.exe /c to resolve pm2.cmd without shell:true (avoids DEP0190).
+        const pm2Cmd  = IS_WINDOWS ? 'cmd.exe' : 'pm2';
+        const pm2Args = IS_WINDOWS
+            ? ['/c', 'pm2', 'set', `pm2-logrotate:${key}`, strValue]
+            : ['set', `pm2-logrotate:${key}`, strValue];
+        await execFileAsync(pm2Cmd, pm2Args, { shell: false, windowsHide: true });
         res.json({ success: true, message: `pm2-logrotate:${key} updated` });
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed to update log rotate config' });

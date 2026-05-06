@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// pm2 internals call the deprecated util.isArray — replace it before pm2 loads (DEP0044)
+require('util').isArray = Array.isArray;
+
 const express = require('express');
 const session = require('express-session');
 const helmet = require('helmet');

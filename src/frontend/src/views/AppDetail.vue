@@ -123,7 +123,7 @@
               <v-btn v-if="app.status==='online'" size="small" color="success" variant="tonal" class="action-btn" @click="reloadApp">
                 <v-icon size="15" class="mr-1">mdi-reload</v-icon>Reload
               </v-btn>
-              <v-btn size="small" color="warning" variant="tonal" class="action-btn" @click="confirmRestart">
+              <v-btn v-if="!app.name.includes('pm2-admin')" size="small" color="warning" variant="tonal" class="action-btn" @click="confirmRestart">
                 <v-icon size="15" class="mr-1">mdi-restart</v-icon>Restart
               </v-btn>
               <v-btn v-if="app.status==='online' && !app.name.includes('pm2')" size="small" color="error" variant="tonal" class="action-btn" @click="stopApp">

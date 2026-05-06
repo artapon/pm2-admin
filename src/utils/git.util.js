@@ -24,11 +24,17 @@ async function safeExec(cmd, cwd) {
     }
 }
 
-// Safe exec for commands with user-controlled arguments
-// shell: true is required on Windows — execFile without shell fails (EINVAL) for .cmd files and PATH resolution
+// Safe exec for commands with user-controlled arguments.
+// On Windows, .cmd shims (git.cmd, pm2.cmd, …) cannot be invoked by execFile
+// directly without shell:true — but shell:true + args triggers DEP0190 because
+// Node concatenates the array into the shell string without escaping.
+// Fix: delegate to cmd.exe /c with shell:false; args stay as a proper vector.
 async function safeExecFile(cmd, args, options = {}) {
+    const finalCmd  = IS_WINDOWS ? 'cmd.exe' : cmd;
+    const finalArgs = IS_WINDOWS ? ['/c', cmd, ...args] : args;
     try {
-        const { stdout, stderr } = await execFileAsync(cmd, args, { windowsHide: true, shell: IS_WINDOWS, ...options });
+        // shell: false is placed last so caller options cannot accidentally re-enable it
+        const { stdout, stderr } = await execFileAsync(finalCmd, finalArgs, { windowsHide: true, ...options, shell: false });
         if (stderr) console.warn('⚠️ STDERR:', stderr);
         return stdout;
     } catch (err) {

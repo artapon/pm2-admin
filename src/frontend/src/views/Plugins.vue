@@ -42,7 +42,7 @@
           <template v-slot:item.restarts="{ item }"><span>{{ item.restarts }}</span></template>
           <template v-slot:item.uptime="{ item }"><span>{{ item.uptime }}</span></template>
           <template v-slot:item.actions="{ item }">
-            <div v-if="authStore.role === 'root'" class="action-btns">
+            <div v-if="authStore.role === 'root' && !item.name.includes('pm2-admin')" class="action-btns">
               <v-btn size="small" color="warning" variant="tonal" prepend-icon="mdi-restart" class="action-btn" @click="openRestart(item.name)">Restart</v-btn>
             </div>
           </template>
