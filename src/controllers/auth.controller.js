@@ -2,7 +2,20 @@ const { validateAdminUser } = require('../services/admin.service');
 const config = require('../config');
 const { db } = require('../services/db.service');
 const bcrypt = require('bcryptjs');
+const path = require('path');
+const { getEnvDataSync, setEnvDataSync } = require('../utils/env.util');
 const { BCRYPT_HASH_ROUNDS } = config.DEFAULTS;
+
+const APP_DIR = path.resolve(__dirname, '../..');
+
+const SETUP_ENV_VALIDATORS = {
+    HOST:          (v) => /^[\w.\-]{1,64}$/.test(v),
+    PORT:          (v) => /^\d{1,5}$/.test(v) && parseInt(v) >= 1 && parseInt(v) <= 65535,
+    APP_ENV:       (v) => /^[A-Za-z0-9 _\-]{1,32}$/.test(v),
+    APP_HTTP_MODE: (v) => v === 'HTTP' || v === 'HTTPS',
+    CERT_KEY:      (v) => /^[A-Za-z0-9_./\\\-:]{1,256}$/.test(v),
+    CERT_PATH:     (v) => /^[A-Za-z0-9_./\\\-:]{1,256}$/.test(v),
+};
 
 const USERNAME_RE = /^[A-Za-z0-9_.\-]{3,64}$/;
 const PASSWORD_MIN = 12;
@@ -14,6 +27,29 @@ const isValidPassword = (p) => typeof p === 'string' && p.length >= PASSWORD_MIN
 const checkSetupRequired = async (req, res) => {
     const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
     res.json({ success: true, setupRequired: userCount === 0 });
+};
+
+const getSetupEnvConfig = async (req, res) => {
+    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+    if (userCount > 0) {
+        return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+    try {
+        const envData = getEnvDataSync(path.join(APP_DIR, '.env'));
+        res.json({
+            success: true,
+            data: {
+                HOST:          envData.HOST          || '127.0.0.1',
+                PORT:          envData.PORT          || '4343',
+                APP_ENV:       envData.APP_ENV       || 'Production',
+                APP_HTTP_MODE: envData.APP_HTTP_MODE || 'HTTP',
+                CERT_KEY:      envData.CERT_KEY      || 'cert.key',
+                CERT_PATH:     envData.CERT_PATH     || 'cert.crt',
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 };
 
 const setupInitialRootUser = async (req, res) => {
@@ -32,6 +68,24 @@ const setupInitialRootUser = async (req, res) => {
 
     const hash = await bcrypt.hash(password, BCRYPT_HASH_ROUNDS);
     db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(username, hash, 'root');
+
+    const { envConfig } = req.body;
+    if (envConfig && typeof envConfig === 'object') {
+        const safeEnv = {};
+        for (const [key, validate] of Object.entries(SETUP_ENV_VALIDATORS)) {
+            const val = envConfig[key];
+            if (val !== undefined && val !== null && val !== '' && validate(String(val))) {
+                safeEnv[key] = String(val);
+            }
+        }
+        if (Object.keys(safeEnv).length > 0) {
+            try {
+                setEnvDataSync(APP_DIR, safeEnv);
+            } catch (err) {
+                console.error('Failed to update .env during setup:', err);
+            }
+        }
+    }
 
     res.json({ success: true, message: 'Initial root user created successfully' });
 };
@@ -107,4 +161,4 @@ const getSession = async (req, res) => {
     }
 };
 
-module.exports = { login, logout, getSession, checkSetupRequired, setupInitialRootUser };
+module.exports = { login, logout, getSession, checkSetupRequired, setupInitialRootUser, getSetupEnvConfig };

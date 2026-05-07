@@ -35,6 +35,13 @@
                   </v-alert>
 
                   <v-form ref="formRef" v-model="valid" @submit.prevent="handleSetup">
+
+                    <!-- Account credentials -->
+                    <div class="section-label mb-3">
+                      <v-icon size="14" class="mr-1">mdi-account-circle-outline</v-icon>
+                      Administrator Account
+                    </div>
+
                     <v-text-field
                       v-model="username"
                       label="Root Username"
@@ -55,9 +62,9 @@
                       type="password"
                       variant="outlined"
                       color="primary"
-                      class="mb-6 modern-input"
+                      class="mb-4 modern-input"
                       required
-                      :rules="[v => !!v || 'Password is required', v => v.length >= 8 || 'Minimum 8 characters']"
+                      :rules="[v => !!v || 'Password is required', v => v.length >= 12 || 'Minimum 12 characters']"
                       density="comfortable"
                     ></v-text-field>
 
@@ -68,11 +75,107 @@
                       type="password"
                       variant="outlined"
                       color="primary"
-                      class="mb-6 modern-input"
+                      class="mb-4 modern-input"
                       required
                       :rules="[v => !!v || 'Please confirm password', v => v === password || 'Passwords do not match']"
                       density="comfortable"
                     ></v-text-field>
+
+                    <!-- Server configuration -->
+                    <v-divider class="my-5" />
+                    <div class="section-label mb-3">
+                      <v-icon size="14" class="mr-1">mdi-server-outline</v-icon>
+                      Server Configuration
+                      <span class="section-label-hint ml-2">(written to .env — requires restart to take effect)</span>
+                    </div>
+
+                    <v-row dense>
+                      <v-col cols="8">
+                        <v-text-field
+                          v-model="envConfig.HOST"
+                          label="Host"
+                          placeholder="0.0.0.0"
+                          prepend-inner-icon="mdi-ip-outline"
+                          variant="outlined"
+                          color="primary"
+                          class="modern-input"
+                          density="comfortable"
+                          :rules="[v => !v || /^[\w.\-]{1,64}$/.test(v) || 'Invalid host']"
+                        ></v-text-field>
+                      </v-col>
+                      <v-col cols="4">
+                        <v-text-field
+                          v-model="envConfig.PORT"
+                          label="Port"
+                          placeholder="4343"
+                          prepend-inner-icon="mdi-numeric"
+                          variant="outlined"
+                          color="primary"
+                          class="modern-input"
+                          density="comfortable"
+                          type="number"
+                          min="1"
+                          max="65535"
+                          :rules="[v => !v || (parseInt(v) >= 1 && parseInt(v) <= 65535) || 'Invalid port']"
+                        ></v-text-field>
+                      </v-col>
+                    </v-row>
+
+                    <v-row dense class="mt-1">
+                      <v-col cols="6">
+                        <v-text-field
+                          v-model="envConfig.APP_ENV"
+                          label="Environment Label"
+                          placeholder="Production"
+                          prepend-inner-icon="mdi-tag-outline"
+                          variant="outlined"
+                          color="primary"
+                          class="modern-input"
+                          density="comfortable"
+                        ></v-text-field>
+                      </v-col>
+                      <v-col cols="6">
+                        <v-select
+                          v-model="envConfig.APP_HTTP_MODE"
+                          label="Protocol"
+                          :items="['HTTP', 'HTTPS']"
+                          prepend-inner-icon="mdi-shield-lock-outline"
+                          variant="outlined"
+                          color="primary"
+                          class="modern-input"
+                          density="comfortable"
+                        ></v-select>
+                      </v-col>
+                    </v-row>
+
+                    <v-row v-if="envConfig.APP_HTTP_MODE === 'HTTPS'" dense class="mt-1">
+                      <v-col cols="6">
+                        <v-text-field
+                          v-model="envConfig.CERT_KEY"
+                          label="Certificate Key Path"
+                          placeholder="cert.key"
+                          prepend-inner-icon="mdi-key-outline"
+                          variant="outlined"
+                          color="primary"
+                          class="modern-input"
+                          density="comfortable"
+                        ></v-text-field>
+                      </v-col>
+                      <v-col cols="6">
+                        <v-text-field
+                          v-model="envConfig.CERT_PATH"
+                          label="Certificate Path"
+                          placeholder="cert.crt"
+                          prepend-inner-icon="mdi-certificate-outline"
+                          variant="outlined"
+                          color="primary"
+                          class="modern-input"
+                          density="comfortable"
+                        ></v-text-field>
+                      </v-col>
+                    </v-row>
+
+                    <v-divider class="my-5" />
 
                     <v-btn
                       type="submit"
@@ -129,18 +232,28 @@ const username = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 
+const envConfig = ref({
+  HOST: '127.0.0.1',
+  PORT: '4343',
+  APP_ENV: 'Production',
+  APP_HTTP_MODE: 'HTTP',
+  CERT_KEY: 'cert.key',
+  CERT_PATH: 'cert.crt',
+})
+
 const handleSetup = async () => {
   if (!valid.value) return
-  
+
   loading.value = true
   error.value = ''
-  
+
   try {
     const response = await api.setupInitial({
       username: username.value,
-      password: password.value
+      password: password.value,
+      envConfig: envConfig.value,
     })
-    
+
     if (response.data.success) {
       successDialog.value = true
     } else {
@@ -159,13 +272,17 @@ const goToLogin = () => {
 
 onMounted(async () => {
   try {
-    const response = await api.checkSetup()
-    if (response.data.success && !response.data.setupRequired) {
-      // Redirect to login if setup is already complete
+    const checkRes = await api.checkSetup()
+    if (checkRes.data.success && !checkRes.data.setupRequired) {
       router.push('/login')
+      return
+    }
+    const envRes = await api.getSetupEnvConfig()
+    if (envRes.data.success) {
+      envConfig.value = { ...envConfig.value, ...envRes.data.data }
     }
   } catch (err) {
-    console.error('Setup check failed:', err)
+    console.error('Setup init failed:', err)
   }
 })
 </script>
@@ -239,6 +356,22 @@ onMounted(async () => {
   height: 52px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
   box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3) !important;
+}
+.section-label {
+  font-size: .75rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  display: flex;
+  align-items: center;
+}
+.section-label-hint {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #475569;
+  font-size: .7rem;
 }
 
 @keyframes fadeIn {

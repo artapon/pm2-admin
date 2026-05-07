@@ -126,6 +126,9 @@ export default {
     checkSetup() {
         return api.get('/auth/setup-check');
     },
+    getSetupEnvConfig() {
+        return api.get('/auth/setup-env');
+    },
     setupInitial(data) {
         return api.post('/auth/setup-initial', data);
     }

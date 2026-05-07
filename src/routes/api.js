@@ -57,6 +57,7 @@ router.post('/auth/login', loginRateLimiter, authController.login);
 router.post('/auth/logout', isAuthenticated, authController.logout);
 router.get('/auth/session', authController.getSession);
 router.get('/auth/setup-check', authController.checkSetupRequired);
+router.get('/auth/setup-env', authController.getSetupEnvConfig);
 router.post('/auth/setup-initial', setupRateLimiter, authController.setupInitialRootUser);
 
 // User Management routes (root only)
