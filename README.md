@@ -8,16 +8,17 @@ A modern, secure web interface for managing PM2 processes. Runs on **Linux** and
 
 - **Process Dashboard** — View status, CPU, memory, uptime, and restarts for all PM2 apps at a glance. PM2 plugin processes are filtered into a separate Plugins page.
 - **Process Control** — Reload, Restart (with optional rename), Stop, and Delete processes.
-- **Log Viewer** — Browse stdout/stderr logs per app with color-coded log levels; download raw log files (root only).
-- **Environment Management** — View, edit, and back up `.env` files per app (root only).
+- **Log Viewer** — Browse stdout/stderr logs per app with color-coded log levels; reload log on demand; download raw log files (root only).
+- **Environment Management** — View, edit, and back up `.env` files per app (root only). Values are hidden by default with a show/hide toggle.
 - **Git Integration** — Clone new repositories and start them as PM2 processes; pull updates for running apps.
 - **Server Monitor** — Live CPU/RAM/Disk charts and top processes list.
 - **Listening Ports** — See which TCP ports are in use and which are mapped to PM2-managed apps.
 - **Scheduled Tasks** — View crontab entries (Linux) or Task Scheduler jobs (Windows) (root only).
 - **Shared Folders** — View Samba/NFS shares (Linux) or network shares (Windows) (root only).
-- **Plugins** — Dedicated view for PM2 module processes with restart control.
+- **Plugins** — Dedicated view for PM2 module processes with restart control (restart is disabled for `pm2-admin` itself).
 - **Log Rotate** — Configure [pm2-logrotate](https://github.com/keymetrics/pm2-logrotate) settings via a UI form.
 - **User Management** — Create and manage users with role-based access.
+- **HTTP / HTTPS** — Run the server in plain HTTP or TLS mode via `.env` config.
 - **Dark UI** — Vue 3 + Vuetify 3 with a clean dark theme.
 
 ## Roles
@@ -112,12 +113,36 @@ copy .env.example .env  # Windows
 | Variable | Default | Description |
 |---|---|---|
 | `HOST` | `127.0.0.1` | Bind address |
-| `PORT` | `4343` | HTTP port |
+| `PORT` | `4343` | Listening port |
 | `APP_SESSION_SECRET` | *(auto-generated)* | Session signing secret — set explicitly for stability across restarts |
 | `NODE_ENV` | — | Set to `production` to enable `Secure` cookies and HSTS |
 | `FORCE_HTTPS` | — | Set to `true` to enable `Secure` cookies and HSTS when behind a TLS-terminating proxy without `NODE_ENV=production` |
+| `APP_HTTP_MODE` | `HTTP` | Set to `HTTPS` to enable TLS — the server reads the cert files below and starts on the configured port |
+| `CERT_KEY` | `cert.key` | Path to the TLS private key file (relative to project root, or absolute) |
+| `CERT_PATH` | `cert.crt` | Path to the TLS certificate file (relative to project root, or absolute) |
+| `APP_ENV` | `Production` | Environment label shown in the UI |
 
 > **Note:** The app sets `trust proxy: 1`. Deploy behind exactly one reverse proxy (nginx, Caddy, etc.) for correct IP-based rate limiting and secure cookies over HTTPS.
+
+### Enabling HTTPS
+
+1. Place your certificate files in the project root (or point to absolute paths):
+   ```
+   cert.key   ← private key
+   cert.crt   ← certificate (or full chain)
+   ```
+2. Update `.env`:
+   ```
+   APP_HTTP_MODE=HTTPS
+   CERT_KEY=cert.key
+   CERT_PATH=cert.crt
+   ```
+3. Restart the app. The server will start on `https://HOST:PORT`. Secure cookies and HSTS are enabled automatically.
+
+To generate a self-signed certificate for local testing:
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout cert.key -out cert.crt -days 365 -nodes -subj "/CN=localhost"
+```
 
 ## Log Rotate
 
@@ -142,7 +167,7 @@ The app detects the host OS at runtime and adjusts behavior automatically:
 |---|---|---|
 | Scheduled Tasks | reads `crontab -l` | reads `schtasks /query` |
 | Shared Folders | Samba (`smbstatus`) + NFS (`exportfs`) | `net share` |
-| Shell execution | POSIX shell | `cmd.exe` via `shell: true` for `.cmd` / PATH resolution |
+| Shell execution | POSIX `execFile` | `cmd.exe /c` wrapper — no shell interpolation of user input |
 | Current user env var | `$USER` | `%USERNAME%` |
 
 ## Tech Stack
@@ -154,6 +179,7 @@ The app detects the host OS at runtime and adjusts behavior automatically:
 - `bcryptjs` — password hashing
 - `helmet` — security headers (CSP, HSTS, COOP, X-Frame-Options, etc.)
 - `express-rate-limit` — rate limiting on auth, git, and write endpoints
+- `ansi-to-html` — ANSI color code rendering in log viewer
 - `systeminformation` — OS/hardware metrics
 - `pm2` — programmatic process control
 
@@ -169,13 +195,15 @@ The app detects the host OS at runtime and adjusts behavior automatically:
 
 - **Passwords** hashed with bcrypt (12 rounds)
 - **Sessions** stored in SQLite; regenerated on login (prevents session fixation); destroyed on logout and password change
-- **Session cookies**: `httpOnly`, `sameSite: strict`, 7-day rolling expiry; `secure` flag enabled in production
-- **Security headers** via `helmet`: Content-Security-Policy, HSTS (production only), X-Frame-Options, X-Content-Type-Options, Cross-Origin policies, Referrer-Policy
+- **Session cookies**: `httpOnly`, `sameSite: strict`, 7-day rolling expiry; `secure` flag enabled in production and HTTPS mode
+- **Security headers** via `helmet`: Content-Security-Policy, HSTS (production / HTTPS mode), X-Frame-Options, X-Content-Type-Options, Cross-Origin policies, Referrer-Policy
 - **Rate limiting**: login 10 req / 15 min (failed attempts only); setup 5 req / 1 hr; password change 5 req / 15 min; git operations 10 req / 5 min; write actions 60 req / 1 min
 - **Input validation**: app names, usernames, branch names, and node args are validated against strict allowlists before reaching PM2 or the filesystem
 - **Command injection prevention**: all shell operations use argument vectors (`execFile`) — no string interpolation with user input; `net usershare info` and `pm2 set` are both protected
+- **SQL injection prevention**: all database queries use parameterized prepared statements — no string interpolation in SQL
+- **XSS prevention**: raw log content is HTML-entity-escaped and null-byte-stripped before ANSI conversion; Vue's template interpolation (`{{ }}`) auto-escapes all bound strings; no `v-html` directives used
 - **Path traversal prevention**: git clone target validated with `path.relative`; log download paths confirmed to be inside the app's working directory
-- **Sensitive data**: `.env` file contents, log downloads, scheduled tasks, and shared folder info are restricted to root users only
+- **Sensitive data**: `.env` file contents are masked by default in the UI (show/hide toggle); log downloads, scheduled tasks, and shared folder info are restricted to root users only
 - **API responses**: `Cache-Control: no-store` on all `/api/*` routes
 - **User ID 1** (initial root) cannot be deleted
 - **Generic auth errors**: login returns the same message for unknown user and wrong password (prevents username enumeration)

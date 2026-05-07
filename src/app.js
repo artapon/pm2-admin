@@ -3,6 +3,9 @@
 // pm2 internals call the deprecated util.isArray — replace it before pm2 loads (DEP0044)
 require('util').isArray = Array.isArray;
 
+const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const express = require('express');
 const session = require('express-session');
 const helmet = require('helmet');
@@ -30,9 +33,10 @@ app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
 const isProd = process.env.NODE_ENV === 'production';
+const isHttpsMode = config.APP_HTTP_MODE === 'HTTPS';
 // Allow operators to force secure cookies / HSTS even when NODE_ENV is unset behind TLS
 const forceHttps = process.env.FORCE_HTTPS === 'true';
-const useSecureCookie = isProd || forceHttps;
+const useSecureCookie = isProd || forceHttps || isHttpsMode;
 
 // helmet — comprehensive security headers (CSP, HSTS, COOP, X-Frame-Options, etc.)
 // CSP is tuned for a Vite-built Vue SPA: 'self' for scripts, 'unsafe-inline' allowed for
@@ -123,6 +127,30 @@ app.use((err, req, res, next) => {
     res.status(status).send(status === 500 ? 'Internal server error' : err.message);
 });
 
-app.listen(config.PORT, config.HOST, () => {
-    console.log(`Application started at http://${config.HOST}:${config.PORT}`);
-});
+if (isHttpsMode) {
+    const certKeyPath = path.isAbsolute(config.CERT_KEY)
+        ? config.CERT_KEY
+        : path.join(config.APP_DIR, config.CERT_KEY);
+    const certCrtPath = path.isAbsolute(config.CERT_PATH)
+        ? config.CERT_PATH
+        : path.join(config.APP_DIR, config.CERT_PATH);
+
+    let key, cert;
+    try {
+        key  = fs.readFileSync(certKeyPath);
+        cert = fs.readFileSync(certCrtPath);
+    } catch (err) {
+        console.error(`[HTTPS] Failed to read certificate files: ${err.message}`);
+        console.error(`  CERT_KEY  : ${certKeyPath}`);
+        console.error(`  CERT_PATH : ${certCrtPath}`);
+        process.exit(1);
+    }
+
+    https.createServer({ key, cert }, app).listen(config.PORT, config.HOST, () => {
+        console.log(`Application started at https://${config.HOST}:${config.PORT}`);
+    });
+} else {
+    http.createServer(app).listen(config.PORT, config.HOST, () => {
+        console.log(`Application started at http://${config.HOST}:${config.PORT}`);
+    });
+}
