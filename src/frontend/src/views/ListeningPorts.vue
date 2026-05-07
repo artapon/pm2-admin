@@ -29,7 +29,7 @@
           </template>
           <template v-slot:item.serviceName="{ item }">
             <div v-if="item.isPM2Service" class="d-flex align-center gap-2">
-              <router-link v-if="item.status==='online'" :to="`/apps/${item.appName}`" class="app-link font-weight-medium">{{ item.appName }}</router-link>
+              <router-link v-if="item.status==='online'" :to="{ name: 'AppDetail', params: { appName: item.appName } }" class="app-link font-weight-medium">{{ item.appName }}</router-link>
               <span v-else class="font-weight-medium">{{ item.appName }}</span>
               <v-chip :color="item.status==='online'?'success':'error'" variant="tonal" size="x-small">{{ item.status }}</v-chip>
             </div>

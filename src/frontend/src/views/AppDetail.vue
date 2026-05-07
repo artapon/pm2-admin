@@ -201,7 +201,7 @@
                   </v-btn>
                 </v-btn-toggle>
                 <v-btn color="secondary" variant="tonal" prepend-icon="mdi-refresh" class="action-btn mr-2" @click="loadAppData">Reload</v-btn>
-                <v-btn color="primary" variant="tonal" prepend-icon="mdi-download-outline" class="action-btn" :href="`/apps/${appName}/${logType==='stdout'?'outlog':'errorlog'}/download`" target="_blank">Download</v-btn>
+                <v-btn color="primary" variant="tonal" prepend-icon="mdi-download-outline" class="action-btn" :href="`/apps/${encodeURIComponent(appName)}/${logType==='stdout'?'outlog':'errorlog'}/download`" target="_blank">Download</v-btn>
               </div>
               <v-divider class="card-divider" />
               <v-card-text class="pa-0">
@@ -365,7 +365,7 @@ const restartApp = async () => {
     await api.restartAppWithRename(oldName, newAppName.value, nodeArgsEdit.value)
     showAlert(`App restarted as: ${newAppName.value}`, 'success')
     restartDialog.value = false
-    if (oldName !== newAppName.value) { appName.value = newAppName.value; router.replace(`/apps/${newAppName.value}`) }
+    if (oldName !== newAppName.value) { appName.value = newAppName.value; router.replace({ name: 'AppDetail', params: { appName: newAppName.value } }) }
     loadAppData()
   } catch { showAlert('Failed to restart', 'error'); restartDialog.value = false }
 }

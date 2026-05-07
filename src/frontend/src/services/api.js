@@ -40,34 +40,34 @@ export default {
         return api.get('/apps/dashboard')
     },
     getApp(appName) {
-        return api.get(`/apps/${appName}`)
+        return api.get(`/apps/${encodeURIComponent(appName)}`)
     },
     getAppLogs(appName, logType, nextKey) {
-        return api.get(`/apps/${appName}/logs/${logType}`, { params: { nextKey } })
+        return api.get(`/apps/${encodeURIComponent(appName)}/logs/${logType}`, { params: { nextKey } })
     },
     reloadApp(appName) {
-        return api.post(`/apps/${appName}/reload`)
+        return api.post(`/apps/${encodeURIComponent(appName)}/reload`)
     },
     restartApp(appName) {
-        return api.post(`/apps/${appName}/restart`)
+        return api.post(`/apps/${encodeURIComponent(appName)}/restart`)
     },
     restartAppWithRename(appName, newAppName, nodeArgs) {
-        return api.post(`/apps/${appName}/restart-rename`, { newAppName, nodeArgs })
+        return api.post(`/apps/${encodeURIComponent(appName)}/restart-rename`, { newAppName, nodeArgs })
     },
     stopApp(appName) {
-        return api.post(`/apps/${appName}/stop`)
+        return api.post(`/apps/${encodeURIComponent(appName)}/stop`)
     },
     deleteApp(appName) {
-        return api.post(`/apps/${appName}/delete`)
+        return api.post(`/apps/${encodeURIComponent(appName)}/delete`)
     },
     flushAppLogs(appName) {
-        return api.post(`/apps/${appName}/flush`)
+        return api.post(`/apps/${encodeURIComponent(appName)}/flush`)
     },
     updateAppEnv(appName, envContent) {
-        return api.post(`/apps/${appName}/updateEnv`, { env_content: envContent })
+        return api.post(`/apps/${encodeURIComponent(appName)}/updateEnv`, { env_content: envContent })
     },
     gitPullApp(appName, username, password, branch) {
-        return api.post(`/apps/${appName}/gitpull`, { username, password, branch })
+        return api.post(`/apps/${encodeURIComponent(appName)}/gitpull`, { username, password, branch })
     },
 
     // System

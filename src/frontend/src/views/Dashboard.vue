@@ -147,7 +147,7 @@
           class="data-table" hover density="comfortable"
         >
           <template v-slot:item.name="{ item }">
-            <router-link :to="`/apps/${item.name}`" class="app-link font-weight-semibold">{{ item.name }}</router-link>
+            <router-link :to="{ name: 'AppDetail', params: { appName: item.name } }" class="app-link font-weight-semibold">{{ item.name }}</router-link>
           </template>
           <template v-slot:item.status="{ item }">
             <v-chip :color="statusColor(item.status)" variant="tonal" size="small" class="status-chip">

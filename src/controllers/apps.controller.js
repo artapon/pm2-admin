@@ -25,7 +25,7 @@ const sanitizeLogLine = (line) => {
 };
 
 // Strict validators — applied to user-controlled inputs that flow into PM2/git/fs ops.
-const APP_NAME_RE = /^[A-Za-z0-9_.:\-]{1,128}$/;
+const APP_NAME_RE = /^[A-Za-z0-9_.,:\-]{1,128}$/;
 const BRANCH_RE = /^[A-Za-z0-9._\-\/]{1,128}$/;
 // Only allow a small whitelist of safe Node CLI flags, no values, no paths, no --require/--inspect/etc.
 const NODE_ARG_RE = /^--(max-old-space-size=\d{1,5}|use-strict|no-deprecation|no-warnings|throw-deprecation|preserve-symlinks|preserve-symlinks-main)$/;
@@ -372,7 +372,7 @@ const restartAppWithRenameAction = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid app name' });
         }
         if (!isValidAppName(newAppName)) {
-            return res.status(400).json({ success: false, error: 'Invalid new app name (alphanumeric, _ . : - only)' });
+            return res.status(400).json({ success: false, error: 'Invalid new app name (alphanumeric, _ . , : - only)' });
         }
 
         let safeNodeArgs;
