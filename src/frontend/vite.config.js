@@ -8,4 +8,10 @@ export default defineConfig({
     vue(),
     vuetify({ autoImport: true }),
   ],
+  build: {
+    rollupOptions: {
+      // Limit parallel file ops to reduce peak memory on low-RAM servers.
+      maxParallelFileOps: 3,
+    },
+  },
 })
