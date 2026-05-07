@@ -141,19 +141,30 @@
           <!-- Env panel -->
           <v-col v-if="authStore.role==='root'" cols="12" md="4">
             <v-card class="page-card fade-in h-100" elevation="0" style="animation-delay:.08s">
-              <v-tabs v-model="envTab" bg-color="transparent" color="primary" density="compact">
-                <v-tab value="current" class="tab-label">Current .env</v-tab>
-                <v-tab value="backup" v-if="envBackup" class="tab-label">Backup .env</v-tab>
-                <v-tab value="edit" class="tab-label">Update .env</v-tab>
-              </v-tabs>
+              <div class="d-flex align-center">
+                <v-tabs v-model="envTab" bg-color="transparent" color="primary" density="compact" class="flex-grow-1">
+                  <v-tab value="current" class="tab-label">Current .env</v-tab>
+                  <v-tab value="backup" v-if="envBackup" class="tab-label">Backup .env</v-tab>
+                  <v-tab value="edit" class="tab-label">Update .env</v-tab>
+                </v-tabs>
+                <v-btn
+                  v-if="envTab !== 'edit'"
+                  :icon="showEnv ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+                  size="small"
+                  variant="text"
+                  class="mr-2"
+                  :title="showEnv ? 'Hide values' : 'Show values'"
+                  @click="showEnv = !showEnv"
+                />
+              </div>
               <v-divider class="card-divider" />
               <v-card-text class="pa-3">
                 <v-window v-model="envTab">
                   <v-window-item value="current">
-                    <v-textarea :model-value="envContent" variant="outlined" rows="22" readonly class="env-ta" hide-details />
+                    <v-textarea :model-value="showEnv ? envContent : maskedEnv(envContent)" variant="outlined" rows="22" readonly class="env-ta" hide-details />
                   </v-window-item>
                   <v-window-item value="backup" v-if="envBackup">
-                    <v-textarea :model-value="envBackup" variant="outlined" rows="22" readonly class="env-ta" hide-details />
+                    <v-textarea :model-value="showEnv ? envBackup : maskedEnv(envBackup)" variant="outlined" rows="22" readonly class="env-ta" hide-details />
                   </v-window-item>
                   <v-window-item value="edit">
                     <v-alert type="warning" variant="tonal" density="compact" class="mb-3 text-caption">
@@ -189,6 +200,7 @@
                     <v-icon size="13" class="mr-1">mdi-alert-circle-outline</v-icon>Error
                   </v-btn>
                 </v-btn-toggle>
+                <v-btn color="secondary" variant="tonal" prepend-icon="mdi-refresh" class="action-btn mr-2" @click="loadAppData">Reload</v-btn>
                 <v-btn color="primary" variant="tonal" prepend-icon="mdi-download-outline" class="action-btn" :href="`/apps/${appName}/${logType==='stdout'?'outlog':'errorlog'}/download`" target="_blank">Download</v-btn>
               </div>
               <v-divider class="card-divider" />
@@ -281,6 +293,13 @@ const envBackup = ref('')
 const envEdit = ref('')
 const logType = ref('stdout')
 const envTab = ref('current')
+const showEnv = ref(false)
+
+const maskedEnv = (raw) => raw.split('\n').map(line => {
+  const eq = line.indexOf('=')
+  if (eq === -1 || line.trimStart().startsWith('#')) return line
+  return line.slice(0, eq + 1) + '●●●●●●●●'
+}).join('\n')
 const showDetails = ref(true)
 const loading = ref(false)
 

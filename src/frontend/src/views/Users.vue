@@ -62,7 +62,7 @@
                 variant="tonal"
                 color="primary"
                 size="small"
-                class="action-btn"
+                class="action-btn mr-2"
                 @click="editUser(item)"
               >
                 Edit

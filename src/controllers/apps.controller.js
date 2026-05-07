@@ -4,10 +4,25 @@ const { getCurrentGitBranch, getCurrentGitCommit, gitPull, gitClone } = require(
 const { getEnvFileRawContent, getEnvFileRawBackupContent, parseEnv, setEnvDataSyncAndBackup } = require('../utils/env.util');
 const { formatBytes } = require('../utils/format.util');
 const AnsiConverter = require('ansi-to-html');
-const ansiConvert = new AnsiConverter();
+// escapeXML: true encodes <, >, &, ", ' in raw log text before wrapping in <span> tags
+const ansiConvert = new AnsiConverter({ escapeXML: true });
 const fs = require('fs');
 const path = require('path');
 const si = require('systeminformation');
+
+// Sanitize a raw log line before ANSI conversion:
+//   1. strip null bytes (can confuse parsers)
+//   2. escape any HTML entities so injected markup can never execute
+const MAX_LOG_LINE = 4096;
+const sanitizeLogLine = (line) => {
+    const s = String(line).replace(/\0/g, '').slice(0, MAX_LOG_LINE);
+    return s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+};
 
 // Strict validators — applied to user-controlled inputs that flow into PM2/git/fs ops.
 const APP_NAME_RE = /^[A-Za-z0-9_.:\-]{1,128}$/;
@@ -176,8 +191,8 @@ const getApp = async (req, res) => {
             readLogsReverse({ filePath: app.pm_err_log_path })
         ]);
 
-        stdout.lines = stdout.lines.map(log => ansiConvert.toHtml(log)).join('<br/>');
-        stderr.lines = stderr.lines.map(log => ansiConvert.toHtml(log)).join('<br/>');
+        stdout.lines = stdout.lines.map(log => ansiConvert.toHtml(sanitizeLogLine(log))).join('<br/>');
+        stderr.lines = stderr.lines.map(log => ansiConvert.toHtml(sanitizeLogLine(log))).join('<br/>');
 
         let customlog = null;
         const customLogPath = path.join(app.pm2_env_cwd, 'logs');
@@ -189,7 +204,7 @@ const getApp = async (req, res) => {
 
             if (logFiles[0]) {
                 customlog = await readLogsReverse({ filePath: path.join(customLogPath, logFiles[0].file) });
-                customlog.lines = customlog.lines.map(log => ansiConvert.toHtml(log)).join('<br/>');
+                customlog.lines = customlog.lines.map(log => ansiConvert.toHtml(sanitizeLogLine(log))).join('<br/>');
             }
         }
 
@@ -226,7 +241,7 @@ const getAppLogs = async (req, res) => {
 
         const filePath = logType === 'stdout' ? app.pm_out_log_path : app.pm_err_log_path;
         const logs = await readLogsReverse({ filePath, nextKey });
-        logs.lines = logs.lines.map(log => ansiConvert.toHtml(log)).join('<br/>');
+        logs.lines = logs.lines.map(log => ansiConvert.toHtml(sanitizeLogLine(log))).join('<br/>');
 
         res.json({ success: true, data: { logs } });
     } catch (error) {

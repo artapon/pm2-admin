@@ -7,7 +7,6 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node .",
     "start:dev": "npx nodemon",
-    "setup-admin-user": "node src/bin/setup-admin-user",
     "build": "npm install --prefix src/frontend && npm run --prefix src/frontend build"
   },
   "keywords": [],
