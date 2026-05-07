@@ -92,5 +92,6 @@ router.get('/system/shares', isAuthenticated, isRoot, systemController.getShared
 router.get('/system/scheduled-tasks', isAuthenticated, isRoot, systemController.getScheduledTasks);
 router.get('/system/logrotate', isAuthenticated, isRoot, systemController.getLogRotateConfig);
 router.post('/system/logrotate', isAuthenticated, isRoot, writeActionLimiter, systemController.setLogRotateConfig);
+router.post('/system/logrotate/install', isAuthenticated, isRoot, writeActionLimiter, systemController.installLogRotate);
 
 module.exports = router;

@@ -22,15 +22,21 @@
           <v-card-text class="pa-4">
             <p class="text-body-2 text-medium-emphasis mb-3">
               pm2-logrotate is a PM2 module that automatically rotates log files to prevent them from growing indefinitely.
-              Install it with the following command:
             </p>
-            <div class="install-cmd-box">
+            <div class="install-cmd-box mb-3">
               <v-icon size="14" color="primary" class="mr-2">mdi-console</v-icon>
               <code class="install-cmd">pm2 install pm2-logrotate</code>
             </div>
-            <p class="text-caption text-medium-emphasis mt-3">
-              After installation, refresh this page to configure log rotation settings.
-            </p>
+            <v-btn
+              color="primary"
+              variant="flat"
+              size="small"
+              prepend-icon="mdi-download-outline"
+              :loading="installing"
+              @click="installModule"
+            >
+              Install pm2-logrotate
+            </v-btn>
           </v-card-text>
         </v-card>
 
@@ -193,6 +199,7 @@ const { showAlert } = useAlert()
 
 const loading = ref(false)
 const saving = ref(false)
+const installing = ref(false)
 const installed = ref(false)
 
 const form = ref({
@@ -228,6 +235,19 @@ const loadConfig = async () => {
     showAlert('Failed to load configuration', 'error')
   } finally {
     loading.value = false
+  }
+}
+
+const installModule = async () => {
+  installing.value = true
+  try {
+    await api.installLogRotate()
+    showAlert('pm2-logrotate installed successfully', 'success')
+    await loadConfig()
+  } catch {
+    showAlert('Failed to install pm2-logrotate', 'error')
+  } finally {
+    installing.value = false
   }
 }
 

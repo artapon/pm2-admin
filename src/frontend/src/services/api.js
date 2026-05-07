@@ -103,6 +103,9 @@ export default {
     setLogRotateConfig(key, value) {
         return api.post('/system/logrotate', { key, value });
     },
+    installLogRotate() {
+        return api.post('/system/logrotate/install');
+    },
 
     // Users (IT Admin only)
     getUsers() {

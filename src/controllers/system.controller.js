@@ -431,6 +431,19 @@ const LOG_ROTATE_DEFAULTS = {
     TZ: ''
 };
 
+const installLogRotate = async (req, res) => {
+    try {
+        const pm2Cmd  = IS_WINDOWS ? 'cmd.exe' : 'pm2';
+        const pm2Args = IS_WINDOWS
+            ? ['/c', 'pm2', 'install', 'pm2-logrotate']
+            : ['install', 'pm2-logrotate'];
+        await execFileAsync(pm2Cmd, pm2Args, { shell: false, windowsHide: true });
+        res.json({ success: true, message: 'pm2-logrotate installed successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: 'Failed to install pm2-logrotate' });
+    }
+};
+
 const getLogRotateConfig = async (req, res) => {
     try {
         let installed = false;
@@ -490,5 +503,6 @@ module.exports = {
     getSharedFolders,
     getScheduledTasks,
     getLogRotateConfig,
-    setLogRotateConfig
+    setLogRotateConfig,
+    installLogRotate
 };
