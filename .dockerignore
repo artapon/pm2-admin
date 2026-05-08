@@ -1,0 +1,19 @@
+# Dependencies — reinstalled inside the image
+node_modules
+src/frontend/node_modules
+
+# Frontend build output — rebuilt inside the image
+src/frontend/dist
+
+# Persistent data — mounted as volumes at runtime
+data
+.env
+
+# Dev / CI artifacts
+*.log
+.git
+.gitignore
+.claude
+screenshots
+.tmp
+.tests

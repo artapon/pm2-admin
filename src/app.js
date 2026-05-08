@@ -1,7 +1,20 @@
 #!/usr/bin/env node
 
-// pm2 internals call the deprecated util.isArray — replace it before pm2 loads (DEP0044)
-require('util').isArray = Array.isArray;
+// Silence DEP0044 (util.isArray) emitted by pm2 internals — the function still works correctly.
+// Primary: replace the property on the shared module object before pm2 loads.
+// A simple assignment silently fails in Node ≥22 where the property may be non-configurable,
+// so use Object.defineProperty instead.
+try {
+    Object.defineProperty(require('util'), 'isArray', {
+        value: Array.isArray, writable: true, enumerable: true, configurable: true,
+    });
+} catch (_) {}
+// Secondary: filter via process.emitWarning for any Node build where the above cannot patch it.
+const _origEmitWarning = process.emitWarning.bind(process);
+process.emitWarning = function (warning, ...rest) {
+    if ((rest[0]?.code ?? rest[1]) === 'DEP0044') return;
+    _origEmitWarning(warning, ...rest);
+};
 
 const http = require('http');
 const https = require('https');
