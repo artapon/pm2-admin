@@ -3,26 +3,21 @@ const { readLogsReverse } = require('../utils/read-logs.util');
 const { getCurrentGitBranch, getCurrentGitCommit, gitPull, gitClone } = require('../utils/git.util');
 const { getEnvFileRawContent, getEnvFileRawBackupContent, parseEnv, setEnvDataSyncAndBackup, resolveEnvFilePath } = require('../utils/env.util');
 const { formatBytes } = require('../utils/format.util');
-const AnsiConverter = require('ansi-to-html');
-// escapeXML: true encodes <, >, &, ", ' in raw log text before wrapping in <span> tags
-const ansiConvert = new AnsiConverter({ escapeXML: true });
 const fs = require('fs');
 const path = require('path');
 const sysinfo = require('../utils/sysinfo.util');
 
-// Sanitize a raw log line before ANSI conversion:
-//   1. strip null bytes (can confuse parsers)
-//   2. escape any HTML entities so injected markup can never execute
+// Logs are sent as plain text — the UI renders them with text interpolation, never v-html,
+// so the terminal output is shown verbatim (quotes, <>, emoji) without HTML escaping.
 const MAX_LOG_LINE = 4096;
-const sanitizeLogLine = (line) => {
-    const s = String(line).replace(/\0/g, '').slice(0, MAX_LOG_LINE);
-    return s
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#x27;');
-};
+// CSI/SGR colour codes, OSC sequences and the remaining single-char escapes
+const ANSI_RE = /\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)|\x1B[@-Z\\-_]|\x1B\[[0-?]*[ -\/]*[@-~]/g;
+const sanitizeLogLine = (line) => String(line)
+    .replace(ANSI_RE, '')
+    // drop control chars that would break rendering, keep tab
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .slice(0, MAX_LOG_LINE);
+const formatLogLines = (lines) => lines.map(sanitizeLogLine).join('\n');
 
 // Strict validators — applied to user-controlled inputs that flow into PM2/git/fs ops.
 const APP_NAME_RE = /^[A-Za-z0-9_.,:\-]{1,128}$/;
@@ -198,8 +193,8 @@ const getApp = async (req, res) => {
         app.env_file_raw = envRaw;
         app.env_file_raw_backup = envRawBackup;
 
-        stdout.lines = stdout.lines.map(log => ansiConvert.toHtml(sanitizeLogLine(log))).join('<br/>');
-        stderr.lines = stderr.lines.map(log => ansiConvert.toHtml(sanitizeLogLine(log))).join('<br/>');
+        stdout.lines = formatLogLines(stdout.lines);
+        stderr.lines = formatLogLines(stderr.lines);
 
         let customlog = null;
         const customLogPath = path.join(app.pm2_env_cwd, 'logs');
@@ -211,7 +206,7 @@ const getApp = async (req, res) => {
 
             if (logFiles[0]) {
                 customlog = await readLogsReverse({ filePath: path.join(customLogPath, logFiles[0].file) });
-                customlog.lines = customlog.lines.map(log => ansiConvert.toHtml(sanitizeLogLine(log))).join('<br/>');
+                customlog.lines = formatLogLines(customlog.lines);
             }
         }
 
@@ -248,7 +243,7 @@ const getAppLogs = async (req, res) => {
 
         const filePath = logType === 'stdout' ? app.pm_out_log_path : app.pm_err_log_path;
         const logs = await readLogsReverse({ filePath, nextKey });
-        logs.lines = logs.lines.map(log => ansiConvert.toHtml(sanitizeLogLine(log))).join('<br/>');
+        logs.lines = formatLogLines(logs.lines);
 
         res.json({ success: true, data: { logs } });
     } catch (error) {
