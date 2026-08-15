@@ -158,6 +158,7 @@
                 />
               </div>
               <v-divider class="card-divider" />
+              <div v-if="envPath" class="env-path" :title="envPath">{{ envPath }}</div>
               <v-card-text class="pa-3">
                 <v-window v-model="envTab">
                   <v-window-item value="current">
@@ -291,6 +292,7 @@ const logs = ref({ stdout: '', stderr: '' })
 const envContent = ref('')
 const envBackup = ref('')
 const envEdit = ref('')
+const envPath = ref('')
 const logType = ref('stdout')
 const envTab = ref('current')
 const showEnv = ref(false)
@@ -334,6 +336,7 @@ const loadAppData = async () => {
       envContent.value = res.data.data.app.env_file_raw || ''
       envBackup.value = res.data.data.app.env_file_raw_backup || ''
       envEdit.value = res.data.data.app.env_file_raw || ''
+      envPath.value = res.data.data.app.env_file_path || ''
     }
   } catch { showAlert('Failed to load app data', 'error') }
   finally { loading.value = false }
@@ -440,6 +443,7 @@ onMounted(loadAppData)
 
 /* Env textarea */
 .env-ta :deep(.v-field__input) { font-family:'Courier New',monospace; font-size:.8rem; line-height:1.5; }
+.env-path { padding:6px 12px 0; font-family:'Courier New',monospace; font-size:.7rem; opacity:.6; direction:rtl; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
 /* Log box */
 .log-box { height:580px; overflow-y:auto; overflow-x:hidden; background:#0b0d14; font-family:'Courier New',monospace; font-size:.82rem; line-height:1.6; padding:8px 0; }

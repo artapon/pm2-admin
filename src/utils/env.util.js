@@ -2,29 +2,37 @@ const fs = require('fs');
 const envfile = require('envfile')
 const path = require('path')
 
-const getEnvFileRawContent = async (wd)=>{
-    const envPath = path.join(wd, '.env')
-    return new Promise((resolve, reject) => {
-        fs.readFile(envPath , 'utf-8', function(err, data){
-            if(!err){
-                resolve(data)
-            }
-            resolve(null)
+// PM2 apps started from an ecosystem file usually share one cwd while each app keeps
+// its own .env in a sub folder (env_file: './centrix-hl7/.env'), so `<cwd>/.env` is
+// often the wrong file — or no file at all. Resolution order:
+//   1. pm2_env.env_file (relative paths are resolved against pm_cwd, like PM2 does)
+//   2. <cwd>/.env when it exists
+//   3. <dir of the script>/.env when it exists (ecosystem apps without env_file)
+//   4. <cwd>/.env as the default target for writes
+const resolveEnvFilePath = ({ cwd, execPath, envFile } = {}) => {
+    if (envFile) return path.resolve(cwd || '.', envFile)
+    const candidates = []
+    if (cwd) candidates.push(path.join(cwd, '.env'))
+    if (execPath) candidates.push(path.join(path.dirname(execPath), '.env'))
+    const found = candidates.find(p => fs.existsSync(p))
+    return found || candidates[0] || null
+}
+
+// The backup lives next to the env file it mirrors — `.env` -> `.env.backup`
+const backupPathFor = (envPath) => envPath ? envPath + '.backup' : null
+
+const readFileOrNull = async (filePath) => {
+    if (!filePath) return null
+    return new Promise((resolve) => {
+        fs.readFile(filePath, 'utf-8', function(err, data){
+            resolve(err ? null : data)
         })
     })
 }
 
-const getEnvFileRawBackupContent = async (wd)=>{
-    const envPath = path.join(wd, '.env.backup')
-    return new Promise((resolve, reject) => {
-        fs.readFile(envPath , 'utf-8', function(err, data){
-            if(!err){
-                resolve(data)
-            }
-            resolve(null)
-        })
-    })
-}
+const getEnvFileRawContent = async (envPath)=> readFileOrNull(envPath)
+
+const getEnvFileRawBackupContent = async (envPath)=> readFileOrNull(backupPathFor(envPath))
 
 const parseEnv = (envFileContent) => {
     const envLines = envFileContent.split(/\r?\n/);
@@ -60,9 +68,12 @@ const setEnvDataSync = (wd, envData) => {
     return true
 }
 
-const setEnvDataSyncAndBackup = (wd, appName, envData) => {
-    const envPath = path.join(wd, '.env');
-    const backupPath = path.join(wd, '.env.backup');
+const setEnvDataSyncAndBackup = (envPath, appName, envData) => {
+    if (!envPath) {
+        console.error(appName + ' Error: no .env file location resolved');
+        return false;
+    }
+    const backupPath = backupPathFor(envPath);
 
     // Read content of the original .env file
     let parseEnvData;
@@ -100,6 +111,7 @@ const setEnvDataSyncAndBackup = (wd, appName, envData) => {
 
 module.exports = {
     parseEnv,
+    resolveEnvFilePath,
     getEnvFileRawContent,
     getEnvDataSync,
     setEnvDataSync,

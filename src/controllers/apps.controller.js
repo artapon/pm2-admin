@@ -1,7 +1,7 @@
 const { listApps, describeApp, reloadApp, restartApp, restartAppWithRename, stopApp, flushApp, deleteApp, nodeInfo } = require('../providers/pm2/api');
 const { readLogsReverse } = require('../utils/read-logs.util');
 const { getCurrentGitBranch, getCurrentGitCommit, gitPull, gitClone } = require('../utils/git.util');
-const { getEnvFileRawContent, getEnvFileRawBackupContent, parseEnv, setEnvDataSyncAndBackup } = require('../utils/env.util');
+const { getEnvFileRawContent, getEnvFileRawBackupContent, parseEnv, setEnvDataSyncAndBackup, resolveEnvFilePath } = require('../utils/env.util');
 const { formatBytes } = require('../utils/format.util');
 const AnsiConverter = require('ansi-to-html');
 // escapeXML: true encodes <, >, &, ", ' in raw log text before wrapping in <span> tags
@@ -174,15 +174,17 @@ const getApp = async (req, res) => {
         // Everything below is independent I/O (WMI, two git spawns, env files, both logs).
         // Run it as one batch instead of a serial chain.
         // Only expose .env contents to root — they typically contain DB passwords/API keys
-        const readEnv = isRoot(req);
+        const envPath = isRoot(req)
+            ? resolveEnvFilePath({ cwd: app.pm2_env_cwd, execPath: app.exec_path, envFile: app.env_file })
+            : null;
 
         const [baseUrl, isWindows, gitBranch, gitCommit, envRaw, envRawBackup, stdout, stderr] = await Promise.all([
             sysinfo.defaultIp(),
             sysinfo.isWindows(),
             getCurrentGitBranch(app.pm2_env_cwd),
             getCurrentGitCommit(app.pm2_env_cwd),
-            readEnv ? getEnvFileRawContent(app.pm2_env_cwd) : null,
-            readEnv ? getEnvFileRawBackupContent(app.pm2_env_cwd) : null,
+            envPath ? getEnvFileRawContent(envPath) : null,
+            envPath ? getEnvFileRawBackupContent(envPath) : null,
             readLogsReverse({ filePath: app.pm_out_log_path }),
             readLogsReverse({ filePath: app.pm_err_log_path })
         ]);
@@ -192,6 +194,7 @@ const getApp = async (req, res) => {
         app.port_https = portHTTPS;
         app.git_branch = gitBranch;
         app.git_commit = gitCommit;
+        app.env_file_path = envPath;
         app.env_file_raw = envRaw;
         app.env_file_raw_backup = envRawBackup;
 
@@ -340,8 +343,12 @@ const updateAppEnv = async (req, res) => {
             return res.status(404).json({ success: false, error: 'App not found' });
         }
 
+        const envPath = resolveEnvFilePath({ cwd: app.pm2_env_cwd, execPath: app.exec_path, envFile: app.env_file });
         const envContent = await parseEnv(env_content);
-        await setEnvDataSyncAndBackup(app.pm2_env_cwd, appName, envContent);
+        const updated = setEnvDataSyncAndBackup(envPath, appName, envContent);
+        if (!updated) {
+            return res.status(500).json({ success: false, error: `Could not update ${envPath || '.env'}` });
+        }
 
         res.json({ success: true, message: `Environment file for ${appName} updated successfully` });
     } catch (error) {
