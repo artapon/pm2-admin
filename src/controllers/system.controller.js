@@ -1,6 +1,7 @@
 const { listApps, pm2Save, nodeInfo } = require('../providers/pm2/api');
 const { formatBytes } = require('../utils/format.util');
 const si = require('systeminformation');
+const sysinfo = require('../utils/sysinfo.util');
 const path = require("path");
 const fs = require('fs');
 const os = require('os');
@@ -14,33 +15,28 @@ const PM2_BIN = 'pm2';
 const SHARE_NAME_RE = /^[A-Za-z0-9_.\-$]{1,80}$/;
 const LOGROTATE_VALUE_RE = /^[A-Za-z0-9_.:\-+\/ *]{0,128}$/;
 
-// Cache platform detection — resolved once on first use
-let _isWindows = null;
-const getIsWindows = async () => {
-    if (_isWindows === null) {
-        const os = await si.osInfo();
-        _isWindows = os.platform.toLowerCase().includes('win');
-    }
-    return _isWindows;
-};
+// Platform detection is cached inside sysinfo.util along with the rest of the OS info
+const getIsWindows = () => sysinfo.isWindows();
 
 const getServerInfo = async (req, res) => {
     try {
         const cwd = path.resolve(__dirname, '../../..');
 
         let serverinfo = {};
+        // declared out here: the response below reads it, and a `const` inside the try
+        // block left the whole endpoint throwing ReferenceError before it could answer
+        let isWindows = null;
         try {
             const [cpu, cpuInfo, mem, os, disk, time, networks] = await Promise.all([
-                si.currentLoad(),
-                si.cpu(),
-                si.mem(),
-                si.osInfo(),
-                si.fsSize(),
-                si.time(),
-                si.networkInterfaces()
+                sysinfo.currentLoad(),
+                sysinfo.cpuInfo(),
+                sysinfo.mem(),
+                sysinfo.osInfo(),
+                sysinfo.fsSize(),
+                sysinfo.time(),
+                sysinfo.networkInterfaces()
             ]);
-            const isWindows = os.platform.toLowerCase().includes('win');
-            _isWindows = isWindows; // populate cache
+            isWindows = os.platform.toLowerCase().includes('win');
             const network = networks.filter(n => n.default);
 
             serverinfo = {
@@ -203,9 +199,9 @@ const gitClone = async (req, res) => {
 const getSystemMonitor = async (req, res) => {
     try {
         const [cpu, cpuInfo, mem] = await Promise.all([
-            si.currentLoad(),
-            si.cpu(),
-            si.mem()
+            sysinfo.currentLoad(),
+            sysinfo.cpuInfo(),
+            sysinfo.mem()
         ]);
 
         res.json({

@@ -8,7 +8,7 @@ const AnsiConverter = require('ansi-to-html');
 const ansiConvert = new AnsiConverter({ escapeXML: true });
 const fs = require('fs');
 const path = require('path');
-const si = require('systeminformation');
+const sysinfo = require('../utils/sysinfo.util');
 
 // Sanitize a raw log line before ANSI conversion:
 //   1. strip null bytes (can confuse parsers)
@@ -79,8 +79,6 @@ const getAllApps = async (req, res) => {
 
 const getDashboard = async (req, res) => {
     try {
-        const apps = await listApps();
-        const node = await nodeInfo();
         const username = req.session?.username || null;
         const cwd = path.resolve(__dirname, '../../..');
 
@@ -88,6 +86,21 @@ const getDashboard = async (req, res) => {
         let stoppedCount = 0;
         let erroredCount = 0;
         let onlineCount = 0;
+        let serverinfo = {};
+
+        // The PM2 list (a CLI spawn) and the machine metrics (WMI) are unrelated — kick both
+        // off before awaiting either, so the response costs the slower one, not their sum.
+        const metricsPromise = Promise.all([
+            sysinfo.currentLoad(),
+            sysinfo.cpuInfo(),
+            sysinfo.mem(),
+            sysinfo.osInfo(),
+            sysinfo.fsSize(),
+            sysinfo.time(),
+            sysinfo.networkInterfaces()
+        ]);
+
+        const [apps, node] = await Promise.all([listApps(), nodeInfo()]);
 
         if (apps) {
             apps.forEach(app => {
@@ -97,17 +110,8 @@ const getDashboard = async (req, res) => {
             });
         }
 
-        let serverinfo = {};
         try {
-            const [cpu, cpuInfo, mem, os, disk, time, networks] = await Promise.all([
-                si.currentLoad(),
-                si.cpu(),
-                si.mem(),
-                si.osInfo(),
-                si.fsSize(),
-                si.time(),
-                si.networkInterfaces()
-            ]);
+            const [cpu, cpuInfo, mem, os, disk, time, networks] = await metricsPromise;
 
             const network = networks.filter(n => n.default);
             isWindows = os.platform.toLowerCase().includes('win');
@@ -132,7 +136,6 @@ const getDashboard = async (req, res) => {
                 })),
                 timeinfo: new Date(time.current) + ' ' + time.timezoneName
             };
-            console.log(`[Diagnostic] Dashboard Disk Scan: Found ${serverinfo.disks.length} disks.`);
         } catch (e) {
             console.log(e);
         }
@@ -158,9 +161,6 @@ const getApp = async (req, res) => {
             return res.status(404).json({ success: false, error: 'App not found' });
         }
 
-        const [networks, os] = await Promise.all([si.networkInterfaces(), si.osInfo()]);
-        const isWindows = os.platform.toLowerCase().includes('win');
-
         let portHTTP = '';
         let portHTTPS = '';
         if (app.name.toString().indexOf(':') !== -1) {
@@ -171,25 +171,29 @@ const getApp = async (req, res) => {
             }
         }
 
-        const network = networks.filter(n => n.default);
-        app.app_base_url = network[0]?.ip4 || 'localhost';
-        app.port_http = portHTTP;
-        app.port_https = portHTTPS;
-        app.git_branch = await getCurrentGitBranch(app.pm2_env_cwd);
-        app.git_commit = await getCurrentGitCommit(app.pm2_env_cwd);
+        // Everything below is independent I/O (WMI, two git spawns, env files, both logs).
+        // Run it as one batch instead of a serial chain.
         // Only expose .env contents to root — they typically contain DB passwords/API keys
-        if (isRoot(req)) {
-            app.env_file_raw = await getEnvFileRawContent(app.pm2_env_cwd);
-            app.env_file_raw_backup = await getEnvFileRawBackupContent(app.pm2_env_cwd);
-        } else {
-            app.env_file_raw = null;
-            app.env_file_raw_backup = null;
-        }
+        const readEnv = isRoot(req);
 
-        const [stdout, stderr] = await Promise.all([
+        const [baseUrl, isWindows, gitBranch, gitCommit, envRaw, envRawBackup, stdout, stderr] = await Promise.all([
+            sysinfo.defaultIp(),
+            sysinfo.isWindows(),
+            getCurrentGitBranch(app.pm2_env_cwd),
+            getCurrentGitCommit(app.pm2_env_cwd),
+            readEnv ? getEnvFileRawContent(app.pm2_env_cwd) : null,
+            readEnv ? getEnvFileRawBackupContent(app.pm2_env_cwd) : null,
             readLogsReverse({ filePath: app.pm_out_log_path }),
             readLogsReverse({ filePath: app.pm_err_log_path })
         ]);
+
+        app.app_base_url = baseUrl;
+        app.port_http = portHTTP;
+        app.port_https = portHTTPS;
+        app.git_branch = gitBranch;
+        app.git_commit = gitCommit;
+        app.env_file_raw = envRaw;
+        app.env_file_raw_backup = envRawBackup;
 
         stdout.lines = stdout.lines.map(log => ansiConvert.toHtml(sanitizeLogLine(log))).join('<br/>');
         stderr.lines = stderr.lines.map(log => ansiConvert.toHtml(sanitizeLogLine(log))).join('<br/>');
