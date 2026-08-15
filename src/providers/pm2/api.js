@@ -1,109 +1,126 @@
-const pm2 = require('pm2');
-const { promisify } = require('util');
-const { exec } = require('child_process');
+const { safeExecFile } = require('../../utils/exec.util');
+const { cached } = require('../../utils/cache.util');
 const { bytesToSize, timeSince } = require('./ux.helper');
 
-const execAsync = promisify(exec);
+const PM2_BIN = 'pm2';
 
-const pm2ConnectAsync = promisify(pm2.connect.bind(pm2));
-const pm2ListAsync    = promisify(pm2.list.bind(pm2));
-const pm2DescribeAsync= promisify(pm2.describe.bind(pm2));
-const pm2ReloadAsync  = promisify(pm2.reload.bind(pm2));
-const pm2RestartAsync = promisify(pm2.restart.bind(pm2));
-const pm2StopAsync    = promisify(pm2.stop.bind(pm2));
-const pm2DeleteAsync  = promisify(pm2.delete.bind(pm2));
-const pm2StartAsync   = promisify(pm2.start.bind(pm2));
-const pm2FlushAsync   = promisify(pm2.flush.bind(pm2));
-const pm2DumpAsync    = promisify(pm2.dump.bind(pm2));
+// `pm2 jlist` embeds each app's full environment, so the payload grows fast.
+// Default execFile maxBuffer (1 MB) is not enough once a handful of apps run.
+const JLIST_MAX_BUFFER = 10 * 1024 * 1024;
 
-// Serial queue — ensures only one PM2 connect/disconnect cycle runs at a time.
-// Concurrent calls were causing "Cannot read properties of null (reading 'sock')"
-// inside PM2's Client.js when disconnect raced against a pending connect callback.
-let _pm2Queue = Promise.resolve();
+// Process identifiers reaching PM2 come from HTTP params — keep the same shape
+// the controllers validate (alphanumeric, _ . , : -) or a plain pm_id.
+const PROCESS_RE = /^[A-Za-z0-9_.,:\-]{1,128}$/;
 
-function withPM2(fn) {
-    const task = _pm2Queue.then(async () => {
-        await pm2ConnectAsync();
-        try {
-            return await fn();
-        } finally {
-            pm2.disconnect();
-        }
-    });
-    // Swallow the error on the queue tail so one failure does not block future calls.
-    _pm2Queue = task.catch(() => {});
-    return task;
+function assertProcess(process) {
+    const id = typeof process === 'number' ? String(process) : process;
+    if (typeof id !== 'string' || !PROCESS_RE.test(id)) {
+        throw new Error('Invalid PM2 process identifier');
+    }
+    return id;
 }
 
+async function pm2Cli(args, options = {}) {
+    return safeExecFile(PM2_BIN, args, options);
+}
+
+// `pm2 jlist` prints JSON on stdout, but PM2 can prepend banner/daemon-spawn
+// noise on first connect — slice to the outermost array before parsing.
+async function jlist() {
+    const stdout = await pm2Cli(['jlist'], { maxBuffer: JLIST_MAX_BUFFER });
+    const start = stdout.indexOf('[');
+    const end = stdout.lastIndexOf(']');
+    if (start === -1 || end === -1 || end < start) {
+        throw new Error('Unexpected output from `pm2 jlist`');
+    }
+    const apps = JSON.parse(stdout.slice(start, end + 1));
+    return Array.isArray(apps) ? apps : [];
+}
+
+// Spawning `pm2 jlist` costs well over a second, and a single request often needs it more
+// than once (describe + list, or list + action). A short TTL collapses those into one spawn
+// and makes back-to-back refreshes instant; every mutation invalidates it right after.
+const jlistCached = cached(jlist, { freshMs: 1000, staleMs: 8000 });
+const invalidateApps = () => jlistCached.invalidate();
+
 async function listApps() {
-    return withPM2(async () => {
-        const apps = await pm2ListAsync();
-        return apps.map(app => ({
-            name: app.name,
-            status: app.pm2_env.status,
-            cpu: app.monit.cpu,
-            memory: bytesToSize(app.monit.memory),
-            uptime: timeSince(app.pm2_env.pm_uptime),
-            pm_id: app.pm_id,
-            restarts: app.pm2_env.restart_time,
-            node_args: app.pm2_env.node_args,
-            env: (process.env.APP_ENV || 'production').toUpperCase()
-        }));
-    });
+    const apps = await jlistCached();
+    return apps.map(app => ({
+        name: app.name,
+        status: app.pm2_env.status,
+        cpu: app.monit.cpu,
+        memory: bytesToSize(app.monit.memory),
+        uptime: timeSince(app.pm2_env.pm_uptime),
+        pm_id: app.pm_id,
+        restarts: app.pm2_env.restart_time,
+        node_args: app.pm2_env.node_args,
+        env: (process.env.APP_ENV || 'production').toUpperCase()
+    }));
 }
 
 async function describeApp(appName) {
-    return withPM2(async () => {
-        const apps = await pm2DescribeAsync(appName);
-        if (!Array.isArray(apps) || apps.length === 0) return null;
-        return {
-            name: apps[0].name,
-            status: apps[0].pm2_env.status,
-            cpu: apps[0].monit.cpu,
-            memory: apps[0].monit.memory,
-            uptime: timeSince(apps[0].pm2_env.pm_uptime),
-            pm_id: apps[0].pm_id,
-            pm_out_log_path: apps[0].pm2_env.pm_out_log_path,
-            pm_err_log_path: apps[0].pm2_env.pm_err_log_path,
-            pm2_env_cwd: apps[0].pm2_env.pm_cwd,
-            project_path: apps[0].pm2_env.pm_cwd,
-            exec_path: apps[0].pm2_env.pm_exec_path,
-            node_version: apps[0].pm2_env.node_version,
-            node_args: apps[0].pm2_env.node_args,
-            restart_time: apps[0].pm2_env.restart_time,
-            restarts: apps[0].pm2_env.restart_time,
-            env: (process.env.APP_ENV || 'production').toUpperCase()
-        };
-    });
+    const name = assertProcess(appName);
+    // `pm2 describe` only renders a human table, so read the same data from jlist.
+    const apps = await jlistCached();
+    const app = apps.find(a => a.name === name || String(a.pm_id) === name);
+    if (!app) return null;
+    return {
+        name: app.name,
+        status: app.pm2_env.status,
+        cpu: app.monit.cpu,
+        memory: app.monit.memory,
+        uptime: timeSince(app.pm2_env.pm_uptime),
+        pm_id: app.pm_id,
+        pm_out_log_path: app.pm2_env.pm_out_log_path,
+        pm_err_log_path: app.pm2_env.pm_err_log_path,
+        pm2_env_cwd: app.pm2_env.pm_cwd,
+        project_path: app.pm2_env.pm_cwd,
+        exec_path: app.pm2_env.pm_exec_path,
+        // ecosystem `env_file` — may be relative to pm_cwd, resolved by env.util
+        env_file: app.pm2_env.env_file || null,
+        node_version: app.pm2_env.node_version,
+        node_args: app.pm2_env.node_args,
+        restart_time: app.pm2_env.restart_time,
+        restarts: app.pm2_env.restart_time,
+        env: (process.env.APP_ENV || 'production').toUpperCase()
+    };
+}
+
+// Callers treat a non-empty array as success — the CLI signals failure by a
+// non-zero exit code, which safeExecFile turns into a throw.
+async function runAction(action, process) {
+    const target = assertProcess(process);
+    console.log(`pm2 ${action} : ${target}`);
+    await pm2Cli([action, target]);
+    invalidateApps();
+    return [{ name: target }];
 }
 
 async function reloadApp(process) {
-    console.log('pm2 reload : ' + process);
-    return withPM2(() => pm2ReloadAsync(process));
+    return runAction('reload', process);
 }
 
 async function stopApp(process) {
-    console.log('pm2 stop : ' + process);
-    return withPM2(() => pm2StopAsync(process));
+    return runAction('stop', process);
 }
 
 async function flushApp(process) {
-    console.log('pm2 flush : ' + process);
-    return withPM2(() => pm2FlushAsync(process));
+    return runAction('flush', process);
 }
 
 async function restartApp(process) {
-    console.log('pm2 restart : ' + process);
-    return withPM2(() => pm2RestartAsync(process));
+    return runAction('restart', process);
+}
+
+async function deleteApp(process) {
+    return runAction('delete', process);
 }
 
 async function pm2Save() {
     console.log('pm2 save');
     const pm2SaveStatus = { status: null, msg: null };
     try {
-        // Use PM2's JS API (dump) instead of shelling out to `pm2 save`.
-        // Shelling out triggered DEP0190 on Windows via PM2's internal npm.cmd spawn.
-        await withPM2(() => pm2DumpAsync());
+        await pm2Cli(['save']);
         pm2SaveStatus.status = 'success';
         pm2SaveStatus.msg = 'pm2 save successfully.';
     } catch (err) {
@@ -113,41 +130,37 @@ async function pm2Save() {
     return pm2SaveStatus;
 }
 
-async function deleteApp(process) {
-    console.log('pm2 delete : ' + process);
-    return withPM2(() => pm2DeleteAsync(process));
-}
-
 async function restartAppWithRename(oldName, newName, scriptPath, cwd, nodeArgs) {
-    console.log(`pm2 restart with rename: ${oldName} -> ${newName}`);
+    const from = assertProcess(oldName);
+    const to = assertProcess(newName);
+    console.log(`pm2 restart with rename: ${from} -> ${to}`);
 
-    await withPM2(async () => {
-        await pm2DeleteAsync(oldName);
+    await pm2Cli(['delete', from]);
 
-        const startOpts = {
-            script: scriptPath,
-            name: newName,
-            cwd,
-            log_date_format: 'YYYY-MM-DD HH:mm:ss'
-        };
-        if (nodeArgs && nodeArgs.trim()) {
-            startOpts.node_args = nodeArgs.trim();
-        }
-        await pm2StartAsync(startOpts);
-    });
+    const startArgs = [
+        'start', scriptPath,
+        '--name', to,
+        '--log-date-format', 'YYYY-MM-DD HH:mm:ss'
+    ];
+    if (nodeArgs && nodeArgs.trim()) {
+        startArgs.push('--node-args', nodeArgs.trim());
+    }
+    await pm2Cli(startArgs, { cwd });
+    invalidateApps();
 
-    // Save outside the withPM2 block so it goes through the queue as its own operation
     await pm2Save();
 
-    return [{ name: newName }];
+    return [{ name: to }];
 }
 
-async function nodeInfo() {
-    const { stdout } = await execAsync('node -v', { windowsHide: true, shell: true });
+// The node binary cannot change under a running process — resolve it once.
+const nodeInfo = cached(async () => {
+    const stdout = await safeExecFile('node', ['-v']);
     return { node: stdout.trim() };
-}
+}, { freshMs: Infinity });
 
 module.exports = {
+    invalidateApps,
     listApps,
     describeApp,
     reloadApp,

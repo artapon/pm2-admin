@@ -6,10 +6,11 @@ const fs = require('fs');
 const os = require('os');
 const { exec, execFile } = require('child_process');
 const { promisify } = require('util');
+const { safeExecFile } = require('../utils/exec.util');
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
-const IS_WINDOWS = process.platform === 'win32';
+const PM2_BIN = 'pm2';
 const SHARE_NAME_RE = /^[A-Za-z0-9_.\-$]{1,80}$/;
 const LOGROTATE_VALUE_RE = /^[A-Za-z0-9_.:\-+\/ *]{0,128}$/;
 
@@ -433,11 +434,7 @@ const LOG_ROTATE_DEFAULTS = {
 
 const installLogRotate = async (req, res) => {
     try {
-        const pm2Cmd  = IS_WINDOWS ? 'cmd.exe' : 'pm2';
-        const pm2Args = IS_WINDOWS
-            ? ['/c', 'pm2', 'install', 'pm2-logrotate']
-            : ['install', 'pm2-logrotate'];
-        await execFileAsync(pm2Cmd, pm2Args, { shell: false, windowsHide: true });
+        await safeExecFile(PM2_BIN, ['install', 'pm2-logrotate']);
         res.json({ success: true, message: 'pm2-logrotate installed successfully' });
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed to install pm2-logrotate' });
@@ -448,7 +445,7 @@ const getLogRotateConfig = async (req, res) => {
     try {
         let installed = false;
         try {
-            await execAsync('pm2 describe pm2-logrotate', { shell: true, windowsHide: true });
+            await safeExecFile(PM2_BIN, ['describe', 'pm2-logrotate']);
             installed = true;
         } catch { installed = false; }
 
@@ -480,13 +477,8 @@ const setLogRotateConfig = async (req, res) => {
         if (!LOGROTATE_VALUE_RE.test(strValue)) {
             return res.status(400).json({ success: false, error: 'Invalid configuration value' });
         }
-        // Use execFile + arg array — no shell interpolation, safe from injection.
-        // On Windows, wrap in cmd.exe /c to resolve pm2.cmd without shell:true (avoids DEP0190).
-        const pm2Cmd  = IS_WINDOWS ? 'cmd.exe' : 'pm2';
-        const pm2Args = IS_WINDOWS
-            ? ['/c', 'pm2', 'set', `pm2-logrotate:${key}`, strValue]
-            : ['set', `pm2-logrotate:${key}`, strValue];
-        await execFileAsync(pm2Cmd, pm2Args, { shell: false, windowsHide: true });
+        // safeExecFile keeps args as a vector — no shell interpolation, safe from injection.
+        await safeExecFile(PM2_BIN, ['set', `pm2-logrotate:${key}`, strValue]);
         res.json({ success: true, message: `pm2-logrotate:${key} updated` });
     } catch (error) {
         res.status(500).json({ success: false, error: 'Failed to update log rotate config' });
