@@ -88,7 +88,7 @@
   </v-main>
 
   <!-- Add / Edit dialog -->
-  <v-dialog v-model="userDialog" max-width="460">
+  <v-dialog v-model="userDialog" max-width="460" :persistent="saving">
     <v-card class="dialog-card">
       <div class="dialog-title">
         <v-icon :color="isEditing ? 'primary' : 'success'" size="18">{{ isEditing ? 'mdi-account-edit-outline' : 'mdi-account-plus-outline' }}</v-icon>
@@ -120,7 +120,7 @@
       </v-card-text>
       <v-card-actions class="pa-5 pt-0">
         <v-spacer />
-        <v-btn variant="text" class="btn-cancel" @click="userDialog=false">Cancel</v-btn>
+        <v-btn variant="text" class="btn-cancel" :disabled="saving" @click="userDialog=false">Cancel</v-btn>
         <v-btn variant="flat" color="primary" :prepend-icon="isEditing ? 'mdi-content-save-outline' : 'mdi-plus'" class="btn-confirm" @click="saveUser" :loading="saving" :disabled="!formValid">
           {{ isEditing ? 'Update' : 'Create' }}
         </v-btn>
@@ -129,7 +129,7 @@
   </v-dialog>
 
   <!-- Change Password dialog -->
-  <v-dialog v-model="passwordDialog" max-width="420">
+  <v-dialog v-model="passwordDialog" max-width="420" :persistent="saving">
     <v-card class="dialog-card">
       <div class="dialog-title">
         <v-icon color="warning" size="18">mdi-lock-reset</v-icon>
@@ -160,7 +160,7 @@
       </v-card-text>
       <v-card-actions class="pa-5 pt-0">
         <v-spacer />
-        <v-btn variant="text" class="btn-cancel" @click="passwordDialog=false">Cancel</v-btn>
+        <v-btn variant="text" class="btn-cancel" :disabled="saving" @click="passwordDialog=false">Cancel</v-btn>
         <v-btn variant="flat" color="warning" prepend-icon="mdi-lock-reset" class="btn-confirm" @click="savePassword" :loading="saving" :disabled="!passwordFormValid">
           Change Password
         </v-btn>
@@ -169,7 +169,7 @@
   </v-dialog>
 
   <!-- Delete dialog -->
-  <v-dialog v-model="deleteDialog" max-width="380">
+  <v-dialog v-model="deleteDialog" max-width="380" :persistent="saving">
     <v-card class="dialog-card">
       <div class="dialog-title"><v-icon color="error" size="18">mdi-delete-outline</v-icon> Confirm Delete</div>
       <v-divider class="card-divider" />
@@ -178,7 +178,7 @@
       </v-card-text>
       <v-card-actions class="pa-4 pt-0">
         <v-spacer />
-        <v-btn variant="text" class="btn-cancel" @click="deleteDialog=false">Cancel</v-btn>
+        <v-btn variant="text" class="btn-cancel" :disabled="saving" @click="deleteDialog=false">Cancel</v-btn>
         <v-btn variant="flat" color="error" prepend-icon="mdi-delete-outline" class="btn-confirm" :loading="saving" @click="deleteUser">Delete</v-btn>
       </v-card-actions>
     </v-card>

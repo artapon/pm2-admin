@@ -176,43 +176,43 @@
   </v-main>
 
   <!-- Delete dialog -->
-  <v-dialog v-model="deleteDialog" max-width="380">
+  <v-dialog v-model="deleteDialog" max-width="380" :persistent="busy">
     <v-card class="dialog-card">
       <div class="dialog-title"><v-icon color="error" size="18">mdi-delete-outline</v-icon> Confirm Delete</div>
       <v-divider class="card-divider" />
       <v-card-text class="pa-5 text-body-2">Delete <strong>{{ appToDelete }}</strong>? This permanently removes the process.</v-card-text>
       <v-card-actions class="pa-4 pt-0">
         <v-spacer />
-        <v-btn variant="text" class="btn-cancel" @click="deleteDialog=false">Cancel</v-btn>
-        <v-btn color="error" variant="flat" prepend-icon="mdi-delete-outline" class="btn-confirm" @click="handleDelete">Delete</v-btn>
+        <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="deleteDialog=false">Cancel</v-btn>
+        <v-btn color="error" variant="flat" prepend-icon="mdi-delete-outline" class="btn-confirm" :loading="busy" @click="handleDelete">Delete</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 
   <!-- Restart dialog -->
-  <v-dialog v-model="restartDialog" max-width="360">
+  <v-dialog v-model="restartDialog" max-width="360" :persistent="busy">
     <v-card class="dialog-card">
       <div class="dialog-title"><v-icon color="warning" size="18">mdi-restart</v-icon> Confirm Restart</div>
       <v-divider class="card-divider" />
       <v-card-text class="pa-5 text-body-2">Restart <strong>{{ appToRestart }}</strong>?</v-card-text>
       <v-card-actions class="pa-4 pt-0">
         <v-spacer />
-        <v-btn variant="text" class="btn-cancel" @click="restartDialog=false">Cancel</v-btn>
-        <v-btn color="warning" variant="flat" prepend-icon="mdi-restart" class="btn-confirm" @click="handleRestart">Restart</v-btn>
+        <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="restartDialog=false">Cancel</v-btn>
+        <v-btn color="warning" variant="flat" prepend-icon="mdi-restart" class="btn-confirm" :loading="busy" @click="handleRestart">Restart</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 
   <!-- Stop dialog -->
-  <v-dialog v-model="stopDialog" max-width="360">
+  <v-dialog v-model="stopDialog" max-width="360" :persistent="busy">
     <v-card class="dialog-card">
       <div class="dialog-title"><v-icon color="error" size="18">mdi-stop-circle-outline</v-icon> Confirm Stop</div>
       <v-divider class="card-divider" />
       <v-card-text class="pa-5 text-body-2">Stop <strong>{{ appToStop }}</strong>?</v-card-text>
       <v-card-actions class="pa-4 pt-0">
         <v-spacer />
-        <v-btn variant="text" class="btn-cancel" @click="stopDialog=false">Cancel</v-btn>
-        <v-btn color="error" variant="flat" prepend-icon="mdi-stop-circle-outline" class="btn-confirm" @click="handleStop">Stop</v-btn>
+        <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="stopDialog=false">Cancel</v-btn>
+        <v-btn color="error" variant="flat" prepend-icon="mdi-stop-circle-outline" class="btn-confirm" :loading="busy" @click="handleStop">Stop</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -223,12 +223,14 @@ import { ref, shallowRef, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useAlert } from '../composables/useAlert'
+import { useBusy } from '../composables/useBusy'
 import api from '../services/api'
 import MainAppBar from '../components/MainAppBar.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const { showAlert } = useAlert()
+const { busy, run } = useBusy()
 
 const allApps = shallowRef([])
 const serverInfo = ref(null)
@@ -287,28 +289,28 @@ const handleReload = async (name) => {
 }
 
 const openRestart = (name) => { appToRestart.value = name; restartDialog.value = true }
-const handleRestart = async () => {
+const handleRestart = () => run(async () => {
   try {
     const res = await api.restartApp(appToRestart.value)
-    if (res.data.success) { showAlert('App restarted', 'success'); restartDialog.value = false; loadDashboard() }
+    if (res.data.success) { showAlert('App restarted', 'success'); restartDialog.value = false; await loadDashboard() }
   } catch { showAlert('Failed to restart', 'error'); restartDialog.value = false }
-}
+})
 
 const openStop = (name) => { appToStop.value = name; stopDialog.value = true }
-const handleStop = async () => {
+const handleStop = () => run(async () => {
   try {
     const res = await api.stopApp(appToStop.value)
-    if (res.data.success) { showAlert('App stopped', 'success'); stopDialog.value = false; loadDashboard() }
+    if (res.data.success) { showAlert('App stopped', 'success'); stopDialog.value = false; await loadDashboard() }
   } catch { showAlert('Failed to stop', 'error'); stopDialog.value = false }
-}
+})
 
 const openDelete = (name) => { appToDelete.value = name; deleteDialog.value = true }
-const handleDelete = async () => {
+const handleDelete = () => run(async () => {
   try {
     const res = await api.deleteApp(appToDelete.value)
-    if (res.data.success) { showAlert('App deleted', 'success'); deleteDialog.value = false; loadDashboard() }
+    if (res.data.success) { showAlert('App deleted', 'success'); deleteDialog.value = false; await loadDashboard() }
   } catch { showAlert('Failed to delete', 'error'); deleteDialog.value = false }
-}
+})
 
 const statusColor = (s) => ({ online: 'success', stopped: 'warning', errored: 'error' }[s] || 'grey')
 const statusIcon  = (s) => ({ online: 'mdi-check-circle', stopped: 'mdi-stop-circle', errored: 'mdi-alert-circle' }[s] || 'mdi-help-circle')

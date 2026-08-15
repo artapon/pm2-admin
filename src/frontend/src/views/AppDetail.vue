@@ -221,7 +221,7 @@
   </v-main>
 
   <!-- Delete dialog -->
-  <v-dialog v-model="deleteDialog" max-width="420">
+  <v-dialog v-model="deleteDialog" max-width="420" :persistent="busy">
     <v-card class="dialog-card">
       <div class="dialog-title"><v-icon color="error" size="18">mdi-delete-outline</v-icon> Confirm Delete</div>
       <v-divider class="card-divider" />
@@ -230,14 +230,14 @@
       </v-card-text>
       <v-card-actions class="pa-4 pt-0">
         <v-spacer />
-        <v-btn variant="text" class="btn-cancel" @click="deleteDialog=false">Cancel</v-btn>
-        <v-btn color="error" variant="flat" prepend-icon="mdi-delete-outline" class="btn-confirm" @click="deleteApp">Delete</v-btn>
+        <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="deleteDialog=false">Cancel</v-btn>
+        <v-btn color="error" variant="flat" prepend-icon="mdi-delete-outline" class="btn-confirm" :loading="busy" @click="deleteApp">Delete</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 
   <!-- Restart dialog -->
-  <v-dialog v-model="restartDialog" max-width="460">
+  <v-dialog v-model="restartDialog" max-width="460" :persistent="busy">
     <v-card class="dialog-card">
       <div class="dialog-title"><v-icon color="warning" size="18">mdi-restart</v-icon> Restart Application</div>
       <v-divider class="card-divider" />
@@ -250,14 +250,14 @@
       </v-card-text>
       <v-card-actions class="pa-4 pt-0">
         <v-spacer />
-        <v-btn variant="text" class="btn-cancel" @click="restartDialog=false">Cancel</v-btn>
-        <v-btn color="warning" variant="flat" prepend-icon="mdi-restart" class="btn-confirm" :disabled="!newAppName" @click="restartApp">Restart</v-btn>
+        <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="restartDialog=false">Cancel</v-btn>
+        <v-btn color="warning" variant="flat" prepend-icon="mdi-restart" class="btn-confirm" :loading="busy" :disabled="!newAppName" @click="restartApp">Restart</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 
   <!-- Flush dialog -->
-  <v-dialog v-model="flushDialog" max-width="420">
+  <v-dialog v-model="flushDialog" max-width="420" :persistent="busy">
     <v-card class="dialog-card">
       <div class="dialog-title"><v-icon color="secondary" size="18">mdi-delete-sweep-outline</v-icon> Flush Logs</div>
       <v-divider class="card-divider" />
@@ -266,8 +266,8 @@
       </v-card-text>
       <v-card-actions class="pa-4 pt-0">
         <v-spacer />
-        <v-btn variant="text" class="btn-cancel" @click="flushDialog=false">Cancel</v-btn>
-        <v-btn color="secondary" variant="flat" prepend-icon="mdi-delete-sweep-outline" class="btn-confirm" @click="flushLogs">Flush</v-btn>
+        <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="flushDialog=false">Cancel</v-btn>
+        <v-btn color="secondary" variant="flat" prepend-icon="mdi-delete-sweep-outline" class="btn-confirm" :loading="busy" @click="flushLogs">Flush</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -278,6 +278,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useAlert } from '../composables/useAlert'
+import { useBusy } from '../composables/useBusy'
 import api from '../services/api'
 import MainAppBar from '../components/MainAppBar.vue'
 
@@ -285,6 +286,7 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { showAlert } = useAlert()
+const { busy, run } = useBusy()
 
 const appName = ref(route.params.appName)
 const app = ref(null)
@@ -362,36 +364,36 @@ const confirmRestart = () => {
   restartDialog.value = true
 }
 
-const restartApp = async () => {
+const restartApp = () => run(async () => {
   try {
     const oldName = appName.value
     await api.restartAppWithRename(oldName, newAppName.value, nodeArgsEdit.value)
     showAlert(`App restarted as: ${newAppName.value}`, 'success')
     restartDialog.value = false
     if (oldName !== newAppName.value) { appName.value = newAppName.value; router.replace({ name: 'AppDetail', params: { appName: newAppName.value } }) }
-    loadAppData()
+    await loadAppData()
   } catch { showAlert('Failed to restart', 'error'); restartDialog.value = false }
-}
+})
 
 const stopApp = async () => {
   try { await api.stopApp(appName.value); showAlert('App stopped', 'success'); loadAppData() }
   catch { showAlert('Failed to stop', 'error') }
 }
 
-const flushLogs = async () => {
-  try { await api.flushAppLogs(appName.value); showAlert('Logs flushed', 'success'); flushDialog.value = false; loadAppData() }
+const flushLogs = () => run(async () => {
+  try { await api.flushAppLogs(appName.value); showAlert('Logs flushed', 'success'); flushDialog.value = false; await loadAppData() }
   catch { showAlert('Failed to flush logs', 'error'); flushDialog.value = false }
-}
+})
 
 let _redirectTimer = null
-const deleteApp = async () => {
+const deleteApp = () => run(async () => {
   try {
     await api.deleteApp(appName.value)
     showAlert('App deleted', 'success')
     deleteDialog.value = false
     _redirectTimer = setTimeout(() => router.push('/apps'), 1200)
   } catch { showAlert('Failed to delete', 'error'); deleteDialog.value = false }
-}
+})
 
 onUnmounted(() => { if (_redirectTimer) clearTimeout(_redirectTimer) })
 

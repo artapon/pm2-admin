@@ -53,15 +53,15 @@
   </v-main>
 
   <!-- Restart dialog -->
-  <v-dialog v-model="restartDialog" max-width="360">
+  <v-dialog v-model="restartDialog" max-width="360" :persistent="busy">
     <v-card class="dialog-card">
       <div class="dialog-title"><v-icon color="warning" size="18">mdi-restart</v-icon> Confirm Restart</div>
       <v-divider class="card-divider" />
       <v-card-text class="pa-5 text-body-2">Restart <strong>{{ appToRestart }}</strong>?</v-card-text>
       <v-card-actions class="pa-4 pt-0">
         <v-spacer />
-        <v-btn variant="text" class="btn-cancel" @click="restartDialog=false">Cancel</v-btn>
-        <v-btn color="warning" variant="flat" prepend-icon="mdi-restart" class="btn-confirm" @click="handleRestart">Restart</v-btn>
+        <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="restartDialog=false">Cancel</v-btn>
+        <v-btn color="warning" variant="flat" prepend-icon="mdi-restart" class="btn-confirm" :loading="busy" @click="handleRestart">Restart</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -71,11 +71,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useAlert } from '../composables/useAlert'
+import { useBusy } from '../composables/useBusy'
 import api from '../services/api'
 import MainAppBar from '../components/MainAppBar.vue'
 
 const authStore = useAuthStore()
 const { showAlert } = useAlert()
+const { busy, run } = useBusy()
 
 const allApps = ref([])
 const loading = ref(false)
@@ -110,17 +112,17 @@ const loadPlugins = async () => {
 }
 
 const openRestart = (name) => { appToRestart.value = name; restartDialog.value = true }
-const handleRestart = async () => {
+const handleRestart = () => run(async () => {
   try {
     await api.restartApp(appToRestart.value)
     showAlert('Plugin restarted', 'success')
     restartDialog.value = false
-    loadPlugins()
+    await loadPlugins()
   } catch {
     showAlert('Failed to restart', 'error')
     restartDialog.value = false
   }
-}
+})
 
 const statusColor = (s) => ({ online: 'success', stopped: 'warning', errored: 'error' }[s] || 'grey')
 const statusIcon  = (s) => ({ online: 'mdi-check-circle', stopped: 'mdi-stop-circle', errored: 'mdi-alert-circle' }[s] || 'mdi-help-circle')
