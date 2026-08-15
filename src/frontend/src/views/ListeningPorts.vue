@@ -29,14 +29,21 @@
           </template>
           <template v-slot:item.serviceName="{ item }">
             <div v-if="item.isPM2Service" class="d-flex align-center gap-2">
-              <router-link v-if="item.status==='online'" :to="{ name: 'AppDetail', params: { appName: item.appName } }" class="app-link font-weight-medium">{{ item.appName }}</router-link>
-              <span v-else class="font-weight-medium">{{ item.appName }}</span>
-              <v-chip :color="item.status==='online'?'success':'error'" variant="tonal" size="x-small">{{ item.status }}</v-chip>
+              <router-link :to="{ name: 'AppDetail', params: { appName: item.appName } }" class="app-link font-weight-medium">{{ item.appName }}</router-link>
+              <v-chip :color="statusColor(item.status)" variant="tonal" size="x-small">{{ item.status }}</v-chip>
             </div>
             <span v-else class="text-secondary">{{ item.appName || '-' }}</span>
           </template>
           <template v-slot:item.localPort="{ item }">
-            <span class="font-weight-semibold font-mono">{{ item.localPort }}</span>
+            <span class="font-weight-semibold font-mono" :class="{ 'text-secondary': !item.listening }">{{ item.localPort }}</span>
+          </template>
+          <template v-slot:item.listening="{ item }">
+            <v-chip v-if="item.listening" size="x-small" variant="tonal" color="success">
+              <v-icon size="12" start>mdi-check-circle-outline</v-icon>Listening
+            </v-chip>
+            <v-chip v-else size="x-small" variant="tonal" color="grey">
+              <v-icon size="12" start>mdi-close-circle-outline</v-icon>Not listening
+            </v-chip>
           </template>
         </v-data-table>
       </v-card>
@@ -56,8 +63,11 @@ const search = ref('')
 const headers = [
   { title: 'Protocol', key: 'protocol', width: '110px' },
   { title: 'Port', key: 'localPort', width: '100px' },
+  { title: 'Bound', key: 'listening', width: '140px', sortable: false },
   { title: 'Service / Application', key: 'serviceName' }
 ]
+
+const statusColor = (s) => ({ online: 'success', stopped: 'warning', errored: 'error' }[s] || 'grey')
 
 const loadPorts = async () => {
   loading.value = true

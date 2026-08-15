@@ -90,7 +90,8 @@ const getListeningPorts = async (req, res) => {
                 state: conn.state,
                 appName: '-',
                 isPM2Service: false,
-                status: null
+                status: null,
+                listening: true
             }));
 
         const uniquePorts = [];
@@ -103,11 +104,17 @@ const getListeningPorts = async (req, res) => {
         }
         listPorts = uniquePorts;
 
-        // Build port→app Map for O(1) lookup instead of O(n*m) find
+        // Apps advertise their ports in the PM2 process name, one or several:
+        //   'lis-interface-ui:8135'  /  'lis-interface-service:8198,8199'
+        // Every declared port maps back to the app — matching only the first one hid
+        // apps whose later port is the one actually bound.
         const portToApp = new Map();
         apps.forEach(app => {
-            const m = app.name.match(/:(\d+)/);
-            if (m) portToApp.set(m[1], app);
+            const m = app.name.match(/:(\d[\d,]*)\s*$/);
+            if (!m) return;
+            m[1].split(',')
+                .filter(Boolean)
+                .forEach(port => portToApp.set(port, app));
         });
 
         listPorts.forEach(port => {
@@ -148,6 +155,25 @@ const getListeningPorts = async (req, res) => {
                 }
             }
         });
+
+        // A stopped app holds no socket, so it is absent from the connection list entirely.
+        // Add a row for every declared port with nothing bound to it — that covers stopped
+        // apps and also an online app whose port failed to bind.
+        for (const [port, app] of portToApp) {
+            if (seenPorts.has(port)) continue;
+            seenPorts.add(port);
+            listPorts.push({
+                protocol: 'TCP',
+                localPort: port,
+                localAddress: '-',
+                peerAddress: '*',
+                state: 'NOT LISTENING',
+                appName: app.name,
+                isPM2Service: true,
+                status: app.status,
+                listening: false
+            });
+        }
 
         listPorts = listPorts.sort((a, b) => parseInt(a.localPort) - parseInt(b.localPort));
 
