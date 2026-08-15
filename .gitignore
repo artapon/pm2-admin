@@ -126,3 +126,4 @@ Jenkinsfile
 
 .claude/
 data/**
+scripts/data/
