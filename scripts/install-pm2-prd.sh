@@ -40,8 +40,10 @@ fi
 
 # ── Start ─────────────────────────────────────────────────────────────────────
 info "Starting '${APP_NAME}' with PM2..."
+# --cwd pins the process to the project root so PM2 keeps it there across resurrects
 pm2 start "${APP_ENTRY}" \
     --name "${APP_NAME}" \
+    --cwd "${PROJECT_ROOT}" \
     --log-date-format "YYYY-MM-DD HH:mm:ss" \
     --restart-delay 3000 \
     --max-restarts 10

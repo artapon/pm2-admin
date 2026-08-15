@@ -80,7 +80,8 @@ pm2 describe %APP_NAME% >nul 2>&1 && (
     echo %YW%[WARN]%RS%  Existing PM2 process '%APP_NAME%' found — deleting...
     pm2 delete %APP_NAME%
 )
-pm2 start "%ROOT%\src\app.js" --name "%APP_NAME%" --log-date-format "YYYY-MM-DD HH:mm:ss" --restart-delay 3000 --max-restarts 10
+:: --cwd pins the process to the project root so PM2 keeps it there across resurrects
+pm2 start "%ROOT%\src\app.js" --name "%APP_NAME%" --cwd "%ROOT%" --log-date-format "YYYY-MM-DD HH:mm:ss" --restart-delay 3000 --max-restarts 10
 if errorlevel 1 (
     echo %RD%[ERROR]%RS% PM2 start failed. Check output above.
     pause & exit /b 1

@@ -39,8 +39,10 @@ if command -v pm2 &>/dev/null; then
         pm2 delete "${APP_NAME}"
     fi
 
+    # --cwd pins the process to the project root so PM2 keeps it there across resurrects
     pm2 start "${PROJECT_ROOT}/src/app.js" \
         --name "${APP_NAME}" \
+        --cwd "${PROJECT_ROOT}" \
         --log-date-format "YYYY-MM-DD HH:mm:ss" \
         --restart-delay 3000 \
         --max-restarts 10
