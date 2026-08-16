@@ -54,6 +54,9 @@ export default {
     restartAppWithRename(appName, newAppName, nodeArgs) {
         return api.post(`/apps/${encodeURIComponent(appName)}/restart-rename`, { newAppName, nodeArgs })
     },
+    resetApp(appName) {
+        return api.post(`/apps/${encodeURIComponent(appName)}/reset`)
+    },
     stopApp(appName) {
         return api.post(`/apps/${encodeURIComponent(appName)}/stop`)
     },

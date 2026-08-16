@@ -112,6 +112,12 @@ async function restartApp(process) {
     return runAction('restart', process);
 }
 
+// `pm2 reset` zeroes the counters PM2 keeps about a process (restart count, uptime);
+// the process itself keeps running untouched.
+async function resetApp(process) {
+    return runAction('reset', process);
+}
+
 async function deleteApp(process) {
     return runAction('delete', process);
 }
@@ -166,6 +172,7 @@ module.exports = {
     reloadApp,
     stopApp,
     restartApp,
+    resetApp,
     flushApp,
     deleteApp,
     restartAppWithRename,

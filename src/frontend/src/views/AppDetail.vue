@@ -126,6 +126,9 @@
               <v-btn v-if="!app.name.includes('pm2-admin')" size="small" color="warning" variant="tonal" class="action-btn" @click="confirmRestart">
                 <v-icon size="15" class="mr-1">mdi-restart</v-icon>Restart
               </v-btn>
+              <v-btn size="small" color="secondary" variant="tonal" class="action-btn" @click="resetDialog=true">
+                <v-icon size="15" class="mr-1">mdi-counter</v-icon>PM2 Reset
+              </v-btn>
               <v-btn v-if="app.status==='online' && !app.name.includes('pm2')" size="small" color="error" variant="tonal" class="action-btn" @click="stopApp">
                 <v-icon size="15" class="mr-1">mdi-stop</v-icon>Stop
               </v-btn>
@@ -207,16 +210,32 @@
                     <v-icon size="13" class="mr-1">mdi-alert-circle-outline</v-icon>Error
                   </v-btn>
                 </v-btn-toggle>
+                <div class="realtime-toggle mr-2" :class="{ 'realtime-toggle--on': realtime }">
+                  <span v-if="realtime" class="live-dot" />
+                  <v-switch
+                    v-model="realtime"
+                    color="success"
+                    density="compact"
+                    hide-details
+                    inset
+                    :label="realtime ? `Live · ${REALTIME_INTERVAL_MS / 1000}s` : 'Realtime'"
+                    class="realtime-switch"
+                  />
+                </div>
                 <v-btn color="secondary" variant="tonal" prepend-icon="mdi-refresh" class="action-btn mr-2" @click="loadAppData">Reload</v-btn>
                 <v-btn color="primary" variant="tonal" prepend-icon="mdi-download-outline" class="action-btn" :href="`/apps/${encodeURIComponent(appName)}/${logType==='stdout'?'outlog':'errorlog'}/download`" target="_blank">Download</v-btn>
               </div>
               <v-divider class="card-divider" />
               <v-card-text class="pa-0">
-                <div class="log-box">
+                <div ref="logBox" class="log-box" @scroll="onLogScroll">
                   <div v-for="(line, i) in logLines" :key="i" :class="['log-line', `log-${line.level}`]">
                     <span class="log-num">{{ i + 1 }}</span>
                     <span class="log-text">{{ line.text }}</span>
                   </div>
+                </div>
+                <div v-if="realtime && !stickToBottom" class="resume-bar" @click="scrollToBottom(true)">
+                  <v-icon size="14" class="mr-1">mdi-arrow-down</v-icon>
+                  Paused scrolling — jump to the newest lines
                 </div>
               </v-card-text>
             </v-card>
@@ -258,6 +277,28 @@
         <v-spacer />
         <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="restartDialog=false">Cancel</v-btn>
         <v-btn color="warning" variant="flat" prepend-icon="mdi-restart" class="btn-confirm" :loading="busy" :disabled="!newAppName" @click="restartApp">Restart</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- PM2 reset dialog -->
+  <v-dialog v-model="resetDialog" max-width="440" :persistent="busy">
+    <v-card class="dialog-card">
+      <div class="dialog-title"><v-icon color="secondary" size="18">mdi-counter</v-icon> PM2 Reset</div>
+      <v-divider class="card-divider" />
+      <v-card-text class="pa-5">
+        <p class="text-body-2 mb-2">
+          Reset PM2's counters for <strong>{{ appName }}</strong> — the restart count
+          <span v-if="app">(currently <strong>{{ app.restarts || 0 }}</strong>)</span> and uptime go back to zero.
+        </p>
+        <p class="text-body-2 text-medium-emphasis mb-0">
+          Runs <code class="inline-code">pm2 reset</code>. The process is not restarted and keeps running.
+        </p>
+      </v-card-text>
+      <v-card-actions class="pa-4 pt-0">
+        <v-spacer />
+        <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="resetDialog=false">Cancel</v-btn>
+        <v-btn color="secondary" variant="flat" prepend-icon="mdi-counter" class="btn-confirm" :loading="busy" @click="resetApp">Reset</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -402,7 +443,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useAlert } from '../composables/useAlert'
@@ -438,6 +479,7 @@ const loading = ref(false)
 const deleteDialog = ref(false)
 const restartDialog = ref(false)
 const flushDialog = ref(false)
+const resetDialog = ref(false)
 const gitPullDialog = ref(false)
 const newAppName = ref('')
 const nodeArgsEdit = ref('')
@@ -461,6 +503,13 @@ const branchItems = computed(() => branches.value.map(b => ({
     ? `${b.name}  (current)`
     : (!b.local && b.remote ? `${b.name}  (remote)` : b.name)
 })))
+
+const REALTIME_INTERVAL_MS = 3000
+const realtime = ref(false)
+const logBox = ref(null)
+const stickToBottom = ref(true)
+let pollTimer = null
+let polling = false
 
 const rawLogs = computed(() => logs.value[logType.value] || 'No logs available')
 
@@ -493,6 +542,64 @@ const loadAppData = async () => {
   finally { loading.value = false }
 }
 
+// Following the tail is only helpful while the view is already at the bottom — once the
+// user scrolls up to read something, yanking them back down would fight them
+const onLogScroll = () => {
+  const el = logBox.value
+  if (!el) return
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+}
+
+const scrollToBottom = (force = false) => {
+  if (force) stickToBottom.value = true
+  nextTick(() => {
+    const el = logBox.value
+    if (el && stickToBottom.value) el.scrollTop = el.scrollHeight
+  })
+}
+
+const pollLogs = async () => {
+  // A slow response must not stack up behind the interval
+  if (polling || document.hidden) return
+  polling = true
+  const type = logType.value
+  try {
+    const res = await api.getAppLogs(appName.value, type)
+    if (res.data.success) {
+      // The log type can change while the request is in flight — dropping the answer
+      // is better than pasting stderr into the stdout pane
+      if (type === logType.value) {
+        logs.value[type] = res.data.data.logs.lines || 'No logs available'
+        scrollToBottom()
+      }
+    }
+  } catch {
+    // A failing poll would otherwise repeat every few seconds forever
+    realtime.value = false
+    showAlert('Realtime logs stopped — failed to read the log', 'error')
+  } finally {
+    polling = false
+  }
+}
+
+const stopRealtime = () => {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+}
+
+const startRealtime = () => {
+  stopRealtime()
+  scrollToBottom(true)
+  pollLogs()
+  pollTimer = setInterval(pollLogs, REALTIME_INTERVAL_MS)
+}
+
+watch(realtime, (on) => { on ? startRealtime() : stopRealtime() })
+// Switching pane while live: fetch that log immediately instead of waiting out the interval
+watch(logType, () => { if (realtime.value) { scrollToBottom(true); pollLogs() } })
+
+// Polling a background tab burns requests for output nobody is reading
+const onVisibilityChange = () => { if (!document.hidden && realtime.value) pollLogs() }
+
 const updateEnv = async () => {
   try {
     await api.updateAppEnv(appName.value, envEdit.value)
@@ -522,6 +629,18 @@ const restartApp = () => run(async () => {
     if (oldName !== newAppName.value) { appName.value = newAppName.value; router.replace({ name: 'AppDetail', params: { appName: newAppName.value } }) }
     await loadAppData()
   } catch { showAlert('Failed to restart', 'error'); restartDialog.value = false }
+})
+
+const resetApp = () => run(async () => {
+  try {
+    await api.resetApp(appName.value)
+    showAlert('PM2 counters reset', 'success')
+    resetDialog.value = false
+    await loadAppData()
+  } catch (err) {
+    showAlert(err.response?.data?.error || 'Failed to reset counters', 'error')
+    resetDialog.value = false
+  }
 })
 
 const stopApp = async () => {
@@ -622,7 +741,11 @@ const deleteApp = () => run(async () => {
   } catch { showAlert('Failed to delete', 'error'); deleteDialog.value = false }
 })
 
-onUnmounted(() => { if (_redirectTimer) clearTimeout(_redirectTimer) })
+onUnmounted(() => {
+  if (_redirectTimer) clearTimeout(_redirectTimer)
+  stopRealtime()
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+})
 
 const statusColor = (s) => ({ online: 'success', stopped: 'warning', errored: 'error' }[s] || 'grey')
 const statusIcon  = (s) => ({ online: 'mdi-check-circle', stopped: 'mdi-stop-circle', errored: 'mdi-alert-circle' }[s] || 'mdi-help-circle')
@@ -634,7 +757,10 @@ const formatBytes = (bytes) => {
   return `${Math.round(bytes / Math.pow(k, i) * 100) / 100} ${sizes[i]}`
 }
 
-onMounted(loadAppData)
+onMounted(() => {
+  loadAppData()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+})
 </script>
 
 <style scoped>
@@ -674,7 +800,19 @@ onMounted(loadAppData)
 .env-ta :deep(.v-field__input) { font-family:'Courier New',monospace; font-size:.8rem; line-height:1.5; }
 .env-path { padding:6px 12px 0; font-family:'Courier New',monospace; font-size:.7rem; opacity:.6; direction:rtl; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
+/* Realtime toggle */
+.realtime-toggle { display:flex; align-items:center; gap:6px; padding:0 10px; height:32px; border:1px solid rgba(255,255,255,.1); border-radius:6px; }
+.realtime-toggle--on { border-color:rgba(34,197,94,.35); background:rgba(34,197,94,.08); }
+.realtime-switch { margin:0; }
+.realtime-switch :deep(.v-selection-control) { min-height:0; }
+.realtime-switch :deep(.v-label) { font-size:.75rem; opacity:1; color:#94a3b8; }
+.realtime-toggle--on .realtime-switch :deep(.v-label) { color:#86efac; }
+.live-dot { width:7px; height:7px; border-radius:50%; background:#22c55e; flex-shrink:0; animation:live-pulse 1.4s ease-in-out infinite; }
+@keyframes live-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.35; transform:scale(.8); } }
+
 /* Log box */
+.resume-bar { display:flex; align-items:center; justify-content:center; padding:6px; background:rgba(99,102,241,.15); border-top:1px solid rgba(99,102,241,.3); color:#a5b4fc; font-size:.75rem; cursor:pointer; }
+.resume-bar:hover { background:rgba(99,102,241,.25); }
 .log-box { height:580px; overflow-y:auto; overflow-x:hidden; background:#0b0d14; font-family:'Courier New',monospace; font-size:.82rem; line-height:1.6; padding:8px 0; }
 .log-line { display:flex; align-items:baseline; padding:1px 12px; border-left:2px solid transparent; }
 .log-line:hover { background:rgba(255,255,255,.04); }
@@ -691,7 +829,8 @@ onMounted(loadAppData)
 .field-label { font-size:.78rem; font-weight:500; color:#94a3b8; }
 .field-optional { font-weight:400; color:#475569; }
 .field-hint { font-size:.72rem; color:#475569; line-height:1.5; padding-left:2px; }
-.field-hint code { background:rgba(255,255,255,.06); border-radius:3px; padding:0 4px; color:#a5b4fc; }
+.field-hint code, .inline-code { background:rgba(255,255,255,.06); border-radius:3px; padding:0 4px; color:#a5b4fc; }
+.inline-code { font-family:'Courier New',monospace; font-size:.75rem; }
 .output-box {
   background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07); border-radius:8px;
   padding:12px 14px; font-family:'Courier New',monospace; font-size:.75rem; color:#cbd5e1;

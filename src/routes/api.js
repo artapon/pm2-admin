@@ -91,6 +91,7 @@ router.get('/apps/:appName/logs/:logType', isAuthenticated, appsController.getAp
 router.post('/apps/:appName/reload', isAuthenticated, isRoot, writeActionLimiter, appsController.reloadAppAction);
 router.post('/apps/:appName/restart', isAuthenticated, isRoot, writeActionLimiter, appsController.restartAppAction);
 router.post('/apps/:appName/restart-rename', isAuthenticated, isRoot, writeActionLimiter, appsController.restartAppWithRenameAction);
+router.post('/apps/:appName/reset', isAuthenticated, isRoot, writeActionLimiter, appsController.resetAppAction);
 router.post('/apps/:appName/stop', isAuthenticated, isRoot, writeActionLimiter, appsController.stopAppAction);
 router.post('/apps/:appName/delete', isAuthenticated, isRoot, writeActionLimiter, appsController.deleteAppAction);
 router.post('/apps/:appName/flush', isAuthenticated, isRoot, writeActionLimiter, appsController.flushAppLogs);

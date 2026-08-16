@@ -1,4 +1,4 @@
-const { listApps, describeApp, reloadApp, restartApp, restartAppWithRename, stopApp, flushApp, deleteApp, nodeInfo } = require('../providers/pm2/api');
+const { listApps, describeApp, reloadApp, restartApp, resetApp, restartAppWithRename, stopApp, flushApp, deleteApp, nodeInfo } = require('../providers/pm2/api');
 const { readLogsReverse } = require('../utils/read-logs.util');
 const { getCurrentGitBranch, getCurrentGitCommit, gitPull, listBranches, checkoutBranch, gitClone } = require('../utils/git.util');
 const { getEnvFileRawContent, getEnvFileRawBackupContent, parseEnv, setEnvDataSyncAndBackup, resolveEnvFilePath } = require('../utils/env.util');
@@ -287,6 +287,24 @@ const restartAppAction = async (req, res) => {
     }
 };
 
+const resetAppAction = async (req, res) => {
+    try {
+        const { appName } = req.params;
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
+        const apps = await resetApp(appName);
+
+        if (Array.isArray(apps) && apps.length > 0) {
+            res.json({ success: true, message: `Counters for ${appName} reset successfully` });
+        } else {
+            res.status(400).json({ success: false, error: 'Failed to reset app counters' });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 const stopAppAction = async (req, res) => {
     try {
         const { appName } = req.params;
@@ -511,6 +529,7 @@ module.exports = {
     getAppLogs,
     reloadAppAction,
     restartAppAction,
+    resetAppAction,
     restartAppWithRenameAction,
     stopAppAction,
     deleteAppAction,

@@ -165,6 +165,7 @@
             <div v-if="authStore.role === 'root'" class="action-btns">
               <v-btn size="small" color="success" variant="tonal" prepend-icon="mdi-reload" class="action-btn" @click="handleReload(item.name)">Reload</v-btn>
               <v-btn size="small" color="warning" variant="tonal" prepend-icon="mdi-restart" class="action-btn" @click="openRestart(item.name)">Restart</v-btn>
+              <v-btn size="small" color="secondary" variant="tonal" prepend-icon="mdi-counter" class="action-btn" @click="openReset(item)">Reset</v-btn>
               <v-btn v-if="item.status==='online' && !item.name.includes('pm2')" size="small" color="error" variant="tonal" prepend-icon="mdi-stop" class="action-btn" @click="openStop(item.name)">Stop</v-btn>
               <v-btn v-if="(item.status==='stopped'||item.status==='errored') && !item.name.includes('pm2')" size="small" color="error" variant="tonal" prepend-icon="mdi-delete-outline" class="action-btn" @click="openDelete(item.name)">Delete</v-btn>
             </div>
@@ -199,6 +200,24 @@
         <v-spacer />
         <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="restartDialog=false">Cancel</v-btn>
         <v-btn color="warning" variant="flat" prepend-icon="mdi-restart" class="btn-confirm" :loading="busy" @click="handleRestart">Restart</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- PM2 reset dialog -->
+  <v-dialog v-model="resetDialog" max-width="420" :persistent="busy">
+    <v-card class="dialog-card">
+      <div class="dialog-title"><v-icon color="secondary" size="18">mdi-counter</v-icon> PM2 Reset</div>
+      <v-divider class="card-divider" />
+      <v-card-text class="pa-5 text-body-2">
+        Reset PM2's counters for <strong>{{ appToReset }}</strong> — the restart count
+        (currently <strong>{{ appToResetRestarts }}</strong>) and uptime go back to zero.
+        The process is not restarted and keeps running.
+      </v-card-text>
+      <v-card-actions class="pa-4 pt-0">
+        <v-spacer />
+        <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="resetDialog=false">Cancel</v-btn>
+        <v-btn color="secondary" variant="flat" prepend-icon="mdi-counter" class="btn-confirm" :loading="busy" @click="handleReset">Reset</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -250,6 +269,9 @@ const restartDialog = ref(false)
 const appToRestart = ref('')
 const stopDialog = ref(false)
 const appToStop = ref('')
+const resetDialog = ref(false)
+const appToReset = ref('')
+const appToResetRestarts = ref(0)
 
 const headers = computed(() => {
   const base = [
@@ -260,7 +282,8 @@ const headers = computed(() => {
     { title: 'Restarts', key: 'restarts', width: '100px' },
     { title: 'Uptime', key: 'uptime' }
   ]
-  if (authStore.role === 'root') base.push({ title: '', key: 'actions', sortable: false, minWidth: '300px', align: 'end' })
+  // Wide enough for the five action buttons to stay on one line
+  if (authStore.role === 'root') base.push({ title: '', key: 'actions', sortable: false, minWidth: '390px', align: 'end' })
   return base
 })
 
@@ -294,6 +317,18 @@ const handleRestart = () => run(async () => {
     const res = await api.restartApp(appToRestart.value)
     if (res.data.success) { showAlert('App restarted', 'success'); restartDialog.value = false; await loadDashboard() }
   } catch { showAlert('Failed to restart', 'error'); restartDialog.value = false }
+})
+
+const openReset = (item) => {
+  appToReset.value = item.name
+  appToResetRestarts.value = item.restarts || 0
+  resetDialog.value = true
+}
+const handleReset = () => run(async () => {
+  try {
+    const res = await api.resetApp(appToReset.value)
+    if (res.data.success) { showAlert('PM2 counters reset', 'success'); resetDialog.value = false; await loadDashboard() }
+  } catch { showAlert('Failed to reset counters', 'error'); resetDialog.value = false }
 })
 
 const openStop = (name) => { appToStop.value = name; stopDialog.value = true }
