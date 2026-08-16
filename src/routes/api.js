@@ -6,6 +6,7 @@ const appsController = require('../controllers/apps.controller');
 const authController = require('../controllers/auth.controller');
 const systemController = require('../controllers/system.controller');
 const usersController = require('../controllers/users.controller');
+const nvmController = require('../controllers/nvm.controller');
 
 // Login: tight limit + per-IP, slows brute-force significantly
 const loginRateLimiter = rateLimit({
@@ -42,6 +43,21 @@ const gitRateLimiter = rateLimit({
     legacyHeaders: false,
     message: { success: false, error: 'Too many git requests, please try again later' }
 });
+
+// Installing a Node.js version downloads a runtime and writes to the nvm root —
+// far heavier than a normal write action, so it gets its own tight limit
+const nvmInstallLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Too many install requests, please try again later' }
+});
+
+// Only the network-touching form of the branch listing needs throttling — reading local
+// refs is cheap enough that limiting it would just break a busy page
+const fetchRateLimiter = (req, res, next) =>
+    (req.query.fetch === '1' || req.query.fetch === 'true') ? gitRateLimiter(req, res, next) : next();
 
 // Generic write-action limiter — applied to PM2 mutation endpoints
 const writeActionLimiter = rateLimit({
@@ -80,6 +96,9 @@ router.post('/apps/:appName/delete', isAuthenticated, isRoot, writeActionLimiter
 router.post('/apps/:appName/flush', isAuthenticated, isRoot, writeActionLimiter, appsController.flushAppLogs);
 router.post('/apps/:appName/updateEnv', isAuthenticated, isRoot, writeActionLimiter, appsController.updateAppEnv);
 router.post('/apps/:appName/gitpull', isAuthenticated, isRoot, gitRateLimiter, appsController.gitPullApp);
+// Listing branches reads local refs and costs nothing — only `?fetch=1` touches the network
+router.get('/apps/:appName/branches', isAuthenticated, isRoot, fetchRateLimiter, appsController.getAppBranches);
+router.post('/apps/:appName/branch', isAuthenticated, isRoot, gitRateLimiter, appsController.checkoutAppBranch);
 
 // System routes — most are read-only and visible to any authenticated user.
 // Shares and scheduled-tasks can leak sensitive layout info — restrict to root.
@@ -94,5 +113,11 @@ router.get('/system/scheduled-tasks', isAuthenticated, isRoot, systemController.
 router.get('/system/logrotate', isAuthenticated, isRoot, systemController.getLogRotateConfig);
 router.post('/system/logrotate', isAuthenticated, isRoot, writeActionLimiter, systemController.setLogRotateConfig);
 router.post('/system/logrotate/install', isAuthenticated, isRoot, writeActionLimiter, systemController.installLogRotate);
+
+// NVM routes — the interpreter paths describe the server layout, and installing a
+// runtime is a privileged action, so the whole area is root only
+router.get('/nvm', isAuthenticated, isRoot, nvmController.getNvmInfo);
+router.get('/nvm/available', isAuthenticated, isRoot, nvmController.getAvailableVersions);
+router.post('/nvm/install', isAuthenticated, isRoot, nvmInstallLimiter, nvmController.installVersion);
 
 module.exports = router;

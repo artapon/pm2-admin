@@ -1,6 +1,6 @@
 const { listApps, describeApp, reloadApp, restartApp, restartAppWithRename, stopApp, flushApp, deleteApp, nodeInfo } = require('../providers/pm2/api');
 const { readLogsReverse } = require('../utils/read-logs.util');
-const { getCurrentGitBranch, getCurrentGitCommit, gitPull, gitClone } = require('../utils/git.util');
+const { getCurrentGitBranch, getCurrentGitCommit, gitPull, listBranches, checkoutBranch, gitClone } = require('../utils/git.util');
 const { getEnvFileRawContent, getEnvFileRawBackupContent, parseEnv, setEnvDataSyncAndBackup, resolveEnvFilePath } = require('../utils/env.util');
 const { formatBytes } = require('../utils/format.util');
 const fs = require('fs');
@@ -408,16 +408,78 @@ const restartAppWithRenameAction = async (req, res) => {
 const gitPullApp = async (req, res) => {
     try {
         const { appName } = req.params;
-        const { username, password, branch = 'master' } = req.body;
+        const { username = '', password = '', branch, stash = false } = req.body;
 
         if (!isValidAppName(appName)) {
             return res.status(400).json({ success: false, error: 'Invalid app name' });
         }
-        if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
-            return res.status(400).json({ success: false, error: 'username and password are required' });
+        if (typeof username !== 'string' || typeof password !== 'string') {
+            return res.status(400).json({ success: false, error: 'Invalid credentials' });
+        }
+        // Both or neither — a lone username would silently be ignored
+        if (Boolean(username) !== Boolean(password)) {
+            return res.status(400).json({ success: false, error: 'Provide both username and password, or neither' });
         }
         if (username.length > 200 || password.length > 500) {
             return res.status(400).json({ success: false, error: 'username/password too long' });
+        }
+        if (branch !== undefined && (typeof branch !== 'string' || !BRANCH_RE.test(branch))) {
+            return res.status(400).json({ success: false, error: 'Invalid branch' });
+        }
+
+        const app = await describeApp(appName);
+        if (!app) {
+            return res.status(404).json({ success: false, error: 'App not found' });
+        }
+
+        const cwd = app.pm2_env_cwd;
+        // Falling back to the checked-out branch beats defaulting to master — an app on
+        // any other branch would otherwise be pulled onto the wrong one
+        const targetBranch = branch || await getCurrentGitBranch(cwd) || 'master';
+
+        const result = await gitPull(appName, cwd, username, password, targetBranch, { stash: Boolean(stash) });
+
+        res.json({
+            success: true,
+            message: `Git pull for ${appName} completed`,
+            data: { branch: targetBranch, output: result.output, stashed: result.stashed }
+        });
+    } catch (error) {
+        // gitPull already redacted any credential-bearing remote out of the message.
+        // `stashed` matters on failure too: the local changes are parked in the stash
+        // and the user needs to know they are recoverable.
+        res.status(500).json({ success: false, error: error.message, data: { stashed: Boolean(error.stashed) } });
+    }
+};
+
+const getAppBranches = async (req, res) => {
+    try {
+        const { appName } = req.params;
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
+
+        const app = await describeApp(appName);
+        if (!app) {
+            return res.status(404).json({ success: false, error: 'App not found' });
+        }
+
+        const fetch = req.query.fetch === '1' || req.query.fetch === 'true';
+        const result = await listBranches(appName, app.pm2_env_cwd, { fetch });
+
+        res.json({ success: true, data: result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: 'Failed to list branches — the app folder may not be a git repository' });
+    }
+};
+
+const checkoutAppBranch = async (req, res) => {
+    try {
+        const { appName } = req.params;
+        const { branch, stash = false } = req.body;
+
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
         }
         if (typeof branch !== 'string' || !BRANCH_RE.test(branch)) {
             return res.status(400).json({ success: false, error: 'Invalid branch' });
@@ -428,11 +490,17 @@ const gitPullApp = async (req, res) => {
             return res.status(404).json({ success: false, error: 'App not found' });
         }
 
-        await gitPull(appName, app.pm2_env_cwd, username, password, branch);
+        const result = await checkoutBranch(appName, app.pm2_env_cwd, branch, { stash: Boolean(stash) });
 
-        res.json({ success: true, message: `Git pull for ${appName} completed` });
+        res.json({
+            success: true,
+            message: `Switched ${appName} to ${result.branch}`,
+            data: result
+        });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        // checkoutBranch already redacted the message; `stashed` tells the user their
+        // local changes are parked and recoverable even when the switch failed
+        res.status(500).json({ success: false, error: error.message, data: { stashed: Boolean(error.stashed) } });
     }
 };
 
@@ -448,5 +516,7 @@ module.exports = {
     deleteAppAction,
     flushAppLogs,
     updateAppEnv,
-    gitPullApp
+    gitPullApp,
+    getAppBranches,
+    checkoutAppBranch
 };

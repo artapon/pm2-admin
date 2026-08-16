@@ -61,6 +61,12 @@ const routes = [
         meta: { requiresAuth: true, requiresAdmin: true }
     },
     {
+        path: '/nvm',
+        name: 'Nvm',
+        component: () => import('../views/Nvm.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
         path: '/plugins',
         name: 'Plugins',
         component: () => import('../views/Plugins.vue'),

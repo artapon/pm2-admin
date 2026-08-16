@@ -141,6 +141,7 @@ const navItems = [
 const rootItems = [
   { title: 'Plugins', icon: 'mdi-puzzle-outline', to: '/plugins' },
   { title: 'Log Rotate', icon: 'mdi-rotate-right', to: '/log-rotate' },
+  { title: 'NVM', icon: 'mdi-nodejs', to: '/nvm' },
   { title: 'Git Clone', icon: 'mdi-source-branch', to: '/git-clone' },
   { title: 'Users', icon: 'mdi-account-group-outline', to: '/users' },
 ]

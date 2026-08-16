@@ -66,8 +66,14 @@ export default {
     updateAppEnv(appName, envContent) {
         return api.post(`/apps/${encodeURIComponent(appName)}/updateEnv`, { env_content: envContent })
     },
-    gitPullApp(appName, username, password, branch) {
-        return api.post(`/apps/${encodeURIComponent(appName)}/gitpull`, { username, password, branch })
+    gitPullApp(appName, { username = '', password = '', branch, stash = false } = {}) {
+        return api.post(`/apps/${encodeURIComponent(appName)}/gitpull`, { username, password, branch, stash })
+    },
+    getAppBranches(appName, fetch = false) {
+        return api.get(`/apps/${encodeURIComponent(appName)}/branches`, { params: fetch ? { fetch: 1 } : {} })
+    },
+    checkoutAppBranch(appName, branch, stash = false) {
+        return api.post(`/apps/${encodeURIComponent(appName)}/branch`, { branch, stash })
     },
 
     // System
@@ -105,6 +111,17 @@ export default {
     },
     installLogRotate() {
         return api.post('/system/logrotate/install');
+    },
+
+    // NVM
+    getNvmInfo() {
+        return api.get('/nvm');
+    },
+    getNvmAvailableVersions() {
+        return api.get('/nvm/available');
+    },
+    installNodeVersion(version) {
+        return api.post('/nvm/install', { version });
     },
 
     // Users (IT Admin only)

@@ -132,6 +132,12 @@
               <v-btn v-if="!app.name.includes('pm2') && (app.status==='stopped'||app.status==='errored')" size="small" color="error" variant="tonal" class="action-btn" @click="deleteDialog=true">
                 <v-icon size="15" class="mr-1">mdi-delete-outline</v-icon>Delete
               </v-btn>
+              <v-btn v-if="app.git_branch" size="small" color="info" variant="tonal" class="action-btn" @click="confirmGitPull">
+                <v-icon size="15" class="mr-1">mdi-source-branch-sync</v-icon>Git Pull
+              </v-btn>
+              <v-btn v-if="app.git_branch" size="small" color="info" variant="tonal" class="action-btn" @click="openBranchDialog">
+                <v-icon size="15" class="mr-1">mdi-source-branch</v-icon>Change Branch
+              </v-btn>
             </v-card-actions>
           </template>
         </v-card>
@@ -256,6 +262,128 @@
     </v-card>
   </v-dialog>
 
+  <!-- Git pull dialog -->
+  <v-dialog v-model="gitPullDialog" max-width="520" :persistent="busy">
+    <v-card class="dialog-card">
+      <div class="dialog-title"><v-icon color="info" size="18">mdi-source-branch-sync</v-icon> Git Pull</div>
+      <v-divider class="card-divider" />
+      <v-card-text class="pa-5">
+        <p class="text-body-2 mb-4">
+          Pull the latest code into <strong>{{ appName }}</strong>.
+          The running process keeps the old code until you restart it.
+        </p>
+
+        <div class="field-label mb-1">Branch</div>
+        <v-text-field v-model="gitPullForm.branch" variant="outlined" density="compact" class="mb-3" hide-details="auto" placeholder="master" />
+
+        <div class="field-label mb-1">Username <span class="field-optional">(leave empty to use the saved remote)</span></div>
+        <v-text-field v-model="gitPullForm.username" variant="outlined" density="compact" class="mb-3" hide-details="auto" autocomplete="off" />
+
+        <div class="field-label mb-1">Password / Token</div>
+        <v-text-field v-model="gitPullForm.password" type="password" variant="outlined" density="compact" class="mb-2" hide-details="auto" autocomplete="new-password" />
+
+        <v-checkbox
+          v-model="gitPullForm.stash"
+          color="warning"
+          density="compact"
+          hide-details
+          label="Stash local changes (force pull)"
+        />
+        <div class="field-hint mb-2">
+          Local edits in the app folder block a merge. Stashing parks them so the pull goes through —
+          run <code>git stash pop</code> in the folder to bring them back.
+        </div>
+
+        <pre v-if="gitPullOutput" class="output-box mt-3">{{ gitPullOutput }}</pre>
+      </v-card-text>
+      <v-card-actions class="pa-4 pt-0">
+        <v-spacer />
+        <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="gitPullDialog=false">Close</v-btn>
+        <v-btn color="info" variant="flat" prepend-icon="mdi-source-branch-sync" class="btn-confirm" :loading="busy" @click="gitPull">Pull</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- Change branch dialog -->
+  <v-dialog v-model="branchDialog" max-width="520" :persistent="busy">
+    <v-card class="dialog-card">
+      <div class="dialog-title"><v-icon color="info" size="18">mdi-source-branch</v-icon> Change Branch</div>
+      <v-divider class="card-divider" />
+      <v-card-text class="pa-5">
+        <p class="text-body-2 mb-4">
+          Switch <strong>{{ appName }}</strong> to another branch.
+          The running process keeps the old code until you restart it.
+        </p>
+
+        <div class="d-flex align-center mb-1">
+          <div class="field-label">Branch</div>
+          <v-spacer />
+          <v-btn
+            variant="text"
+            size="x-small"
+            prepend-icon="mdi-cloud-download-outline"
+            class="btn-cancel"
+            :loading="branchesLoading"
+            :disabled="busy"
+            @click="loadBranches(true)"
+          >
+            Fetch from remote
+          </v-btn>
+        </div>
+        <v-select
+          v-model="branchToCheckout"
+          :items="branchItems"
+          item-title="title"
+          item-value="value"
+          :loading="branchesLoading"
+          :disabled="busy"
+          variant="outlined"
+          density="compact"
+          hide-details="auto"
+          placeholder="Select a branch"
+          class="mb-1"
+        />
+        <div class="field-hint mb-2">
+          Current branch: <code>{{ currentBranch || 'unknown' }}</code>.
+          A branch that exists only on the remote is checked out as a new local tracking branch.
+        </div>
+
+        <v-alert v-if="branchFetchError" type="warning" variant="tonal" density="compact" class="mb-3 text-caption">
+          Could not reach the remote — showing the branches known locally.
+        </v-alert>
+
+        <v-checkbox
+          v-model="branchStash"
+          color="warning"
+          density="compact"
+          hide-details
+          label="Stash local changes (force switch)"
+        />
+        <div class="field-hint mb-2">
+          Uncommitted edits block a branch switch. Stashing parks them —
+          run <code>git stash pop</code> in the folder to bring them back.
+        </div>
+
+        <pre v-if="branchOutput" class="output-box mt-3">{{ branchOutput }}</pre>
+      </v-card-text>
+      <v-card-actions class="pa-4 pt-0">
+        <v-spacer />
+        <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="branchDialog=false">Close</v-btn>
+        <v-btn
+          color="info"
+          variant="flat"
+          prepend-icon="mdi-source-branch-check"
+          class="btn-confirm"
+          :loading="busy"
+          :disabled="!branchToCheckout || branchToCheckout === currentBranch"
+          @click="switchBranch"
+        >
+          Switch
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <!-- Flush dialog -->
   <v-dialog v-model="flushDialog" max-width="420" :persistent="busy">
     <v-card class="dialog-card">
@@ -310,8 +438,29 @@ const loading = ref(false)
 const deleteDialog = ref(false)
 const restartDialog = ref(false)
 const flushDialog = ref(false)
+const gitPullDialog = ref(false)
 const newAppName = ref('')
 const nodeArgsEdit = ref('')
+const gitPullForm = ref({ branch: '', username: '', password: '', stash: false })
+const gitPullOutput = ref('')
+
+const branchDialog = ref(false)
+const branches = ref([])
+const currentBranch = ref('')
+const branchToCheckout = ref('')
+const branchStash = ref(false)
+const branchOutput = ref('')
+const branchFetchError = ref('')
+const branchesLoading = ref(false)
+
+const branchItems = computed(() => branches.value.map(b => ({
+  value: b.name,
+  // Where a branch lives decides what the switch will do — local checkout, or a new
+  // tracking branch created from the remote
+  title: b.current
+    ? `${b.name}  (current)`
+    : (!b.local && b.remote ? `${b.name}  (remote)` : b.name)
+})))
 
 const rawLogs = computed(() => logs.value[logType.value] || 'No logs available')
 
@@ -379,6 +528,84 @@ const stopApp = async () => {
   try { await api.stopApp(appName.value); showAlert('App stopped', 'success'); loadAppData() }
   catch { showAlert('Failed to stop', 'error') }
 }
+
+const confirmGitPull = () => {
+  gitPullForm.value = { branch: app.value.git_branch || '', username: '', password: '', stash: false }
+  gitPullOutput.value = ''
+  gitPullDialog.value = true
+}
+
+const gitPull = () => run(async () => {
+  gitPullOutput.value = ''
+  try {
+    const res = await api.gitPullApp(appName.value, {
+      username: gitPullForm.value.username,
+      password: gitPullForm.value.password,
+      branch: gitPullForm.value.branch || undefined,
+      stash: gitPullForm.value.stash
+    })
+    gitPullOutput.value = res.data.data?.output || 'Done'
+    showAlert(res.data.data?.stashed ? 'Pulled — local changes were stashed' : 'Git pull completed', 'success')
+    // Credentials are never persisted — clear them as soon as the request is done
+    gitPullForm.value.password = ''
+    await loadAppData()
+  } catch (err) {
+    const message = err.response?.data?.error || 'Git pull failed'
+    // The dialog stays open on failure: the git output is the only place the reason shows
+    gitPullOutput.value = err.response?.data?.data?.stashed
+      ? `${message}\n\nLocal changes were stashed — recover them with: git stash pop`
+      : message
+    showAlert(message, 'error')
+  }
+})
+
+const loadBranches = async (fetch = false) => {
+  branchesLoading.value = true
+  try {
+    const res = await api.getAppBranches(appName.value, fetch)
+    if (res.data.success) {
+      branches.value = res.data.data.branches || []
+      currentBranch.value = res.data.data.current || ''
+      branchFetchError.value = res.data.data.fetchError || ''
+      if (!branchToCheckout.value) branchToCheckout.value = currentBranch.value
+    }
+  } catch (err) {
+    showAlert(err.response?.data?.error || 'Failed to load branches', 'error')
+  } finally {
+    branchesLoading.value = false
+  }
+}
+
+const openBranchDialog = () => {
+  branches.value = []
+  branchToCheckout.value = ''
+  branchStash.value = false
+  branchOutput.value = ''
+  branchFetchError.value = ''
+  branchDialog.value = true
+  // Local refs only on open — reaching the remote is a deliberate click
+  loadBranches(false)
+}
+
+const switchBranch = () => run(async () => {
+  branchOutput.value = ''
+  try {
+    const res = await api.checkoutAppBranch(appName.value, branchToCheckout.value, branchStash.value)
+    branchOutput.value = res.data.data?.output || 'Done'
+    showAlert(res.data.data?.stashed
+      ? `Switched to ${branchToCheckout.value} — local changes were stashed`
+      : `Switched to ${branchToCheckout.value}`, 'success')
+    currentBranch.value = res.data.data?.branch || branchToCheckout.value
+    await Promise.all([loadAppData(), loadBranches(false)])
+  } catch (err) {
+    const message = err.response?.data?.error || 'Failed to switch branch'
+    // The dialog stays open on failure: the git output is the only place the reason shows
+    branchOutput.value = err.response?.data?.data?.stashed
+      ? `${message}\n\nLocal changes were stashed — recover them with: git stash pop`
+      : message
+    showAlert(message, 'error')
+  }
+})
 
 const flushLogs = () => run(async () => {
   try { await api.flushAppLogs(appName.value); showAlert('Logs flushed', 'success'); flushDialog.value = false; await loadAppData() }
@@ -462,4 +689,12 @@ onMounted(loadAppData)
 
 /* Dialog */
 .field-label { font-size:.78rem; font-weight:500; color:#94a3b8; }
+.field-optional { font-weight:400; color:#475569; }
+.field-hint { font-size:.72rem; color:#475569; line-height:1.5; padding-left:2px; }
+.field-hint code { background:rgba(255,255,255,.06); border-radius:3px; padding:0 4px; color:#a5b4fc; }
+.output-box {
+  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07); border-radius:8px;
+  padding:12px 14px; font-family:'Courier New',monospace; font-size:.75rem; color:#cbd5e1;
+  white-space:pre-wrap; word-break:break-word; max-height:220px; overflow:auto;
+}
 </style>
