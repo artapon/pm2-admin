@@ -42,6 +42,9 @@ export default {
     getApp(appName) {
         return api.get(`/apps/${encodeURIComponent(appName)}`)
     },
+    getAppDescribe(appName) {
+        return api.get(`/apps/${encodeURIComponent(appName)}/describe`)
+    },
     getAppLogs(appName, logType, nextKey) {
         return api.get(`/apps/${encodeURIComponent(appName)}/logs/${logType}`, { params: { nextKey } })
     },

@@ -86,6 +86,13 @@ async function describeApp(appName) {
     };
 }
 
+// The CLI's own rendering of `pm2 describe` — a human-readable table that the UI shows
+// verbatim, unlike describeApp() which reads the same facts out of jlist as fields.
+async function describeAppRaw(appName) {
+    const name = assertProcess(appName);
+    return pm2Cli(['describe', name]);
+}
+
 // Callers treat a non-empty array as success — the CLI signals failure by a
 // non-zero exit code, which safeExecFile turns into a throw.
 async function runAction(action, process) {
@@ -169,6 +176,7 @@ module.exports = {
     invalidateApps,
     listApps,
     describeApp,
+    describeAppRaw,
     reloadApp,
     stopApp,
     restartApp,

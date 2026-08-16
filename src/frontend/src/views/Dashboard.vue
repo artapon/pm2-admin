@@ -165,8 +165,8 @@
             <div v-if="authStore.role === 'root'" class="action-btns">
               <v-btn size="small" color="success" variant="tonal" prepend-icon="mdi-reload" class="action-btn" @click="handleReload(item.name)">Reload</v-btn>
               <v-btn size="small" color="warning" variant="tonal" prepend-icon="mdi-restart" class="action-btn" @click="openRestart(item.name)">Restart</v-btn>
-              <v-btn size="small" color="secondary" variant="tonal" prepend-icon="mdi-counter" class="action-btn" @click="openReset(item)">Reset</v-btn>
               <v-btn v-if="item.status==='online' && !item.name.includes('pm2')" size="small" color="error" variant="tonal" prepend-icon="mdi-stop" class="action-btn" @click="openStop(item.name)">Stop</v-btn>
+              <v-btn size="small" color="secondary" variant="tonal" prepend-icon="mdi-counter" class="action-btn" @click="openReset(item)">Reset</v-btn>
               <v-btn v-if="(item.status==='stopped'||item.status==='errored') && !item.name.includes('pm2')" size="small" color="error" variant="tonal" prepend-icon="mdi-delete-outline" class="action-btn" @click="openDelete(item.name)">Delete</v-btn>
             </div>
           </template>

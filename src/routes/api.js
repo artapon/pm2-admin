@@ -88,6 +88,9 @@ router.get('/apps', isAuthenticated, appsController.getAllApps);
 router.get('/apps/dashboard', isAuthenticated, appsController.getDashboard);
 router.get('/apps/:appName', isAuthenticated, appsController.getApp);
 router.get('/apps/:appName/logs/:logType', isAuthenticated, appsController.getAppLogs);
+// `pm2 describe` prints filesystem paths and any divergent env vars — root only,
+// same as the .env contents on the detail page
+router.get('/apps/:appName/describe', isAuthenticated, isRoot, appsController.getAppDescribe);
 router.post('/apps/:appName/reload', isAuthenticated, isRoot, writeActionLimiter, appsController.reloadAppAction);
 router.post('/apps/:appName/restart', isAuthenticated, isRoot, writeActionLimiter, appsController.restartAppAction);
 router.post('/apps/:appName/restart-rename', isAuthenticated, isRoot, writeActionLimiter, appsController.restartAppWithRenameAction);

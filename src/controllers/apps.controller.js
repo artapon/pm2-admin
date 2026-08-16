@@ -1,4 +1,4 @@
-const { listApps, describeApp, reloadApp, restartApp, resetApp, restartAppWithRename, stopApp, flushApp, deleteApp, nodeInfo } = require('../providers/pm2/api');
+const { listApps, describeApp, describeAppRaw, reloadApp, restartApp, resetApp, restartAppWithRename, stopApp, flushApp, deleteApp, nodeInfo } = require('../providers/pm2/api');
 const { readLogsReverse } = require('../utils/read-logs.util');
 const { getCurrentGitBranch, getCurrentGitCommit, gitPull, listBranches, checkoutBranch, gitClone } = require('../utils/git.util');
 const { getEnvFileRawContent, getEnvFileRawBackupContent, parseEnv, setEnvDataSyncAndBackup, resolveEnvFilePath } = require('../utils/env.util');
@@ -246,6 +246,29 @@ const getAppLogs = async (req, res) => {
         logs.lines = formatLogLines(logs.lines);
 
         res.json({ success: true, data: { logs } });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+const getAppDescribe = async (req, res) => {
+    try {
+        const { appName } = req.params;
+        if (!isValidAppName(appName)) {
+            return res.status(400).json({ success: false, error: 'Invalid app name' });
+        }
+
+        const app = await describeApp(appName);
+        if (!app) {
+            return res.status(404).json({ success: false, error: 'App not found' });
+        }
+
+        const raw = await describeAppRaw(appName);
+        // The CLI colours its table with ANSI codes — the same sanitiser the logs use
+        // strips them, leaving the box-drawing characters intact
+        const output = formatLogLines(raw.split('\n'));
+
+        res.json({ success: true, data: { output } });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -527,6 +550,7 @@ module.exports = {
     getDashboard,
     getApp,
     getAppLogs,
+    getAppDescribe,
     reloadAppAction,
     restartAppAction,
     resetAppAction,

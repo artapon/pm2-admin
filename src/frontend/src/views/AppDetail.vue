@@ -90,6 +90,9 @@
                 <v-col cols="12" md="6" v-if="app.node_version">
                   <div class="info-row"><v-icon size="15" color="success" class="mr-2">mdi-nodejs</v-icon><span class="info-key">Node:</span><span class="info-val">{{ app.node_version }}</span></div>
                 </v-col>
+                <v-col cols="12" md="6" v-if="nodeArgsText">
+                  <div class="info-row"><v-icon size="15" color="info" class="mr-2">mdi-flag-outline</v-icon><span class="info-key">Node Arguments:</span><span class="info-val">{{ nodeArgsText }}</span></div>
+                </v-col>
                 <v-col cols="12" md="6" v-if="app.git_branch">
                   <div class="info-row"><v-icon size="15" color="warning" class="mr-2">mdi-source-branch</v-icon><span class="info-key">Branch:</span><span class="info-val">{{ app.git_branch }}</span></div>
                 </v-col>
@@ -126,11 +129,14 @@
               <v-btn v-if="!app.name.includes('pm2-admin')" size="small" color="warning" variant="tonal" class="action-btn" @click="confirmRestart">
                 <v-icon size="15" class="mr-1">mdi-restart</v-icon>Restart
               </v-btn>
+              <v-btn v-if="app.status==='online' && !app.name.includes('pm2')" size="small" color="error" variant="tonal" class="action-btn" @click="stopApp">
+                <v-icon size="15" class="mr-1">mdi-stop</v-icon>Stop
+              </v-btn>
               <v-btn size="small" color="secondary" variant="tonal" class="action-btn" @click="resetDialog=true">
                 <v-icon size="15" class="mr-1">mdi-counter</v-icon>PM2 Reset
               </v-btn>
-              <v-btn v-if="app.status==='online' && !app.name.includes('pm2')" size="small" color="error" variant="tonal" class="action-btn" @click="stopApp">
-                <v-icon size="15" class="mr-1">mdi-stop</v-icon>Stop
+              <v-btn size="small" color="info" variant="tonal" class="action-btn" @click="openDescribe">
+                <v-icon size="15" class="mr-1">mdi-information-outline</v-icon>PM2 Describe
               </v-btn>
               <v-btn v-if="!app.name.includes('pm2') && (app.status==='stopped'||app.status==='errored')" size="small" color="error" variant="tonal" class="action-btn" @click="deleteDialog=true">
                 <v-icon size="15" class="mr-1">mdi-delete-outline</v-icon>Delete
@@ -277,6 +283,39 @@
         <v-spacer />
         <v-btn variant="text" class="btn-cancel" :disabled="busy" @click="restartDialog=false">Cancel</v-btn>
         <v-btn color="warning" variant="flat" prepend-icon="mdi-restart" class="btn-confirm" :loading="busy" :disabled="!newAppName" @click="restartApp">Restart</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- PM2 describe dialog -->
+  <v-dialog v-model="describeDialog" max-width="820" scrollable>
+    <v-card class="dialog-card">
+      <div class="dialog-title">
+        <v-icon color="info" size="18">mdi-information-outline</v-icon> PM2 Describe
+        <v-spacer />
+        <v-btn
+          icon="mdi-refresh"
+          variant="text"
+          size="small"
+          :loading="describeLoading"
+          title="Run again"
+          @click="loadDescribe"
+        />
+      </div>
+      <v-divider class="card-divider" />
+      <v-card-text class="pa-5">
+        <div class="cmd-line mb-3">
+          <v-icon size="14" color="info" class="mr-2">mdi-console</v-icon>
+          <code>pm2 describe {{ appName }}</code>
+        </div>
+        <div v-if="describeLoading" class="d-flex align-center justify-center py-8">
+          <v-progress-circular indeterminate color="info" size="32" />
+        </div>
+        <pre v-else class="describe-box">{{ describeOutput }}</pre>
+      </v-card-text>
+      <v-card-actions class="pa-4 pt-0">
+        <v-spacer />
+        <v-btn variant="text" class="btn-cancel" @click="describeDialog=false">Close</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -480,6 +519,9 @@ const deleteDialog = ref(false)
 const restartDialog = ref(false)
 const flushDialog = ref(false)
 const resetDialog = ref(false)
+const describeDialog = ref(false)
+const describeOutput = ref('')
+const describeLoading = ref(false)
 const gitPullDialog = ref(false)
 const newAppName = ref('')
 const nodeArgsEdit = ref('')
@@ -510,6 +552,13 @@ const logBox = ref(null)
 const stickToBottom = ref(true)
 let pollTimer = null
 let polling = false
+
+// PM2 reports node_args as an array, but an app started from an ecosystem file can
+// carry a plain string — both have to render as one command-line fragment
+const nodeArgsText = computed(() => {
+  const args = app.value?.node_args
+  return Array.isArray(args) ? args.join(' ') : (args || '')
+})
 
 const rawLogs = computed(() => logs.value[logType.value] || 'No logs available')
 
@@ -616,7 +665,7 @@ const reloadApp = async () => {
 
 const confirmRestart = () => {
   newAppName.value = appName.value
-  nodeArgsEdit.value = Array.isArray(app.value.node_args) ? app.value.node_args.join(' ') : (app.value.node_args || '')
+  nodeArgsEdit.value = nodeArgsText.value
   restartDialog.value = true
 }
 
@@ -630,6 +679,24 @@ const restartApp = () => run(async () => {
     await loadAppData()
   } catch { showAlert('Failed to restart', 'error'); restartDialog.value = false }
 })
+
+const loadDescribe = async () => {
+  describeLoading.value = true
+  try {
+    const res = await api.getAppDescribe(appName.value)
+    describeOutput.value = res.data.data?.output || 'No output'
+  } catch (err) {
+    describeOutput.value = err.response?.data?.error || 'Failed to run pm2 describe'
+  } finally {
+    describeLoading.value = false
+  }
+}
+
+const openDescribe = () => {
+  describeOutput.value = ''
+  describeDialog.value = true
+  loadDescribe()
+}
 
 const resetApp = () => run(async () => {
   try {
@@ -831,6 +898,9 @@ onMounted(() => {
 .field-hint { font-size:.72rem; color:#475569; line-height:1.5; padding-left:2px; }
 .field-hint code, .inline-code { background:rgba(255,255,255,.06); border-radius:3px; padding:0 4px; color:#a5b4fc; }
 .inline-code { font-family:'Courier New',monospace; font-size:.75rem; }
+.cmd-line { display:flex; align-items:center; font-family:'Courier New',monospace; font-size:.78rem; color:#a5b4fc; background:rgba(255,255,255,.04); border:1px solid rgba(99,102,241,.25); border-radius:8px; padding:8px 12px; word-break:break-all; }
+/* The CLI table is fixed-width — it must scroll sideways rather than wrap into nonsense */
+.describe-box { background:#0b0d14; border:1px solid rgba(255,255,255,.07); border-radius:8px; padding:12px 14px; font-family:'Courier New',monospace; font-size:.75rem; line-height:1.5; color:#cbd5e1; white-space:pre; overflow:auto; max-height:60vh; }
 .output-box {
   background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07); border-radius:8px;
   padding:12px 14px; font-family:'Courier New',monospace; font-size:.75rem; color:#cbd5e1;
