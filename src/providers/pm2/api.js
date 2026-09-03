@@ -1,5 +1,6 @@
 const { safeExecFile } = require('../../utils/exec.util');
 const { cached } = require('../../utils/cache.util');
+const { isValidAppName } = require('../../utils/app-name.util');
 const { bytesToSize, timeSince } = require('./ux.helper');
 
 const PM2_BIN = 'pm2';
@@ -8,13 +9,11 @@ const PM2_BIN = 'pm2';
 // Default execFile maxBuffer (1 MB) is not enough once a handful of apps run.
 const JLIST_MAX_BUFFER = 10 * 1024 * 1024;
 
-// Process identifiers reaching PM2 come from HTTP params — keep the same shape
-// the controllers validate (alphanumeric, _ . , : -) or a plain pm_id.
-const PROCESS_RE = /^[A-Za-z0-9_.,:\-]{1,128}$/;
-
+// Process identifiers reaching PM2 come from HTTP params — same shape the routes and
+// controllers validate (alphanumeric, _ . , : -) or a plain pm_id.
 function assertProcess(process) {
     const id = typeof process === 'number' ? String(process) : process;
-    if (typeof id !== 'string' || !PROCESS_RE.test(id)) {
+    if (!isValidAppName(id)) {
         throw new Error('Invalid PM2 process identifier');
     }
     return id;
@@ -93,6 +92,11 @@ async function describeAppRaw(appName) {
     return pm2Cli(['describe', name]);
 }
 
+// Crash-loop guard applied to apps this UI (re)starts. PM2's default is an immediate
+// respawn, which turns a broken app into a busy loop.
+const RESTART_BACKOFF_MS = 1000;
+const MAX_RESTARTS = 10;
+
 // Callers treat a non-empty array as success — the CLI signals failure by a
 // non-zero exit code, which safeExecFile turns into a throw.
 async function runAction(action, process) {
@@ -153,7 +157,17 @@ async function restartAppWithRename(oldName, newName, scriptPath, cwd, nodeArgs)
     const startArgs = [
         'start', scriptPath,
         '--name', to,
-        '--log-date-format', 'YYYY-MM-DD HH:mm:ss'
+        '--log-date-format', 'YYYY-MM-DD HH:mm:ss',
+        // Without a guard, an app that errors on boot is respawned by PM2 as fast as it can
+        // exit — hundreds of times a minute, each one churning logs and (in cluster mode)
+        // flashing a console window on Windows. Backoff grows the gap 1.5x per failure up to
+        // PM2's 15s ceiling, so the app still recovers on its own once whatever it waits on
+        // comes back, without the busy loop. Note this throttles rather than gives up: PM2
+        // only counts a restart as "unstable" inside the first min_uptime * max_restarts of a
+        // process's life, and backoff pushes attempts past that window, so --max-restarts
+        // only ends up stopping an app whose failures come fast enough to stay inside it.
+        '--exp-backoff-restart-delay', String(RESTART_BACKOFF_MS),
+        '--max-restarts', String(MAX_RESTARTS)
     ];
     if (nodeArgs && nodeArgs.trim()) {
         startArgs.push('--node-args', nodeArgs.trim());

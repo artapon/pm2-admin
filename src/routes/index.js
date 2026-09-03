@@ -10,7 +10,7 @@ const apiRouter = require('./api');
 // Mount API router
 router.use('/api', apiRouter);
 
-const APP_NAME_RE = /^[A-Za-z0-9_.:\-]{1,128}$/;
+const { isValidAppName } = require('../utils/app-name.util');
 
 // Serve SPA index.html
 const serveIndex = (req, res) => {
@@ -40,7 +40,7 @@ function isPathInside(filePath, allowedDir) {
 router.get('/apps/:appName/outlog/download', isAuthenticated, isRoot, async (req, res) => {
     try {
         const { appName } = req.params;
-        if (!APP_NAME_RE.test(appName)) return res.status(400).json({ error: 'Invalid app name' });
+        if (!isValidAppName(appName)) return res.status(400).json({ error: 'Invalid app name' });
         const app = await describeApp(appName);
         if (!app) return res.status(404).json({ error: 'App not found' });
         const fileName = app.pm_out_log_path;
@@ -57,7 +57,7 @@ router.get('/apps/:appName/outlog/download', isAuthenticated, isRoot, async (req
 router.get('/apps/:appName/errorlog/download', isAuthenticated, isRoot, async (req, res) => {
     try {
         const { appName } = req.params;
-        if (!APP_NAME_RE.test(appName)) return res.status(400).json({ error: 'Invalid app name' });
+        if (!isValidAppName(appName)) return res.status(400).json({ error: 'Invalid app name' });
         const app = await describeApp(appName);
         if (!app) return res.status(404).json({ error: 'App not found' });
         const fileName = app.pm_err_log_path;
@@ -74,7 +74,7 @@ router.get('/apps/:appName/errorlog/download', isAuthenticated, isRoot, async (r
 router.get('/apps/:appName/customlog/download', isAuthenticated, isRoot, async (req, res) => {
     try {
         const { appName } = req.params;
-        if (!APP_NAME_RE.test(appName)) return res.status(400).json({ error: 'Invalid app name' });
+        if (!isValidAppName(appName)) return res.status(400).json({ error: 'Invalid app name' });
         const app = await describeApp(appName);
         if (!app) return res.status(404).json({ error: 'App not found' });
 

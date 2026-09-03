@@ -212,8 +212,11 @@
                   <v-btn value="stdout" class="action-btn">
                     <v-icon size="13" class="mr-1">mdi-console</v-icon>Output
                   </v-btn>
-                  <v-btn value="stderr" class="action-btn">
+                  <v-btn value="stderr" class="action-btn" @click="acknowledgeErrors">
                     <v-icon size="13" class="mr-1">mdi-alert-circle-outline</v-icon>Error
+                    <span v-if="newErrorCount" class="err-badge" :title="`${newErrorCount} new error log line(s)`">
+                      <v-icon size="11" class="mr-1">mdi-alert</v-icon>{{ newErrorCount > 99 ? '99+' : newErrorCount }}
+                    </span>
                   </v-btn>
                 </v-btn-toggle>
                 <div class="realtime-toggle mr-2" :class="{ 'realtime-toggle--on': realtime }">
@@ -552,6 +555,7 @@ const logBox = ref(null)
 const stickToBottom = ref(true)
 let pollTimer = null
 let polling = false
+let errorBaselineSet = false
 
 // PM2 reports node_args as an array, but an app started from an ecosystem file can
 // carry a plain string — both have to render as one command-line fragment
@@ -560,10 +564,54 @@ const nodeArgsText = computed(() => {
   return Array.isArray(args) ? args.join(' ') : (args || '')
 })
 
-const rawLogs = computed(() => logs.value[logType.value] || 'No logs available')
+const NO_LOGS = 'No logs available'
+const LOG_LINE_SPLIT = /\n|<br\s*\/?>/i
+
+// Unread error lines picked up by the last reload/poll — the Error tab wears this as a
+// badge so a reload while the Output pane is open still surfaces a fresh crash
+const newErrorCount = ref(0)
+// The stderr text the user has already been shown; the baseline every diff is taken from
+const seenStderr = ref('')
+
+// The API hands back a tail window, not the whole file, so a plain prefix compare would
+// call every line new as soon as the window slides. What the user has already read is the
+// overlap between the old tail and the new head.
+const appendedLines = (prev, next) => {
+  const prevLines = prev ? prev.split(LOG_LINE_SPLIT) : []
+  const nextLines = next ? next.split(LOG_LINE_SPLIT) : []
+  if (!prevLines.length) return nextLines
+  for (let k = Math.min(prevLines.length, nextLines.length); k > 0; k--) {
+    let match = true
+    for (let i = 0; i < k; i++) {
+      if (prevLines[prevLines.length - k + i] !== nextLines[i]) { match = false; break }
+    }
+    if (match) return nextLines.slice(k)
+  }
+  // No overlap at all: the log was flushed or rotated, so treat what is there as new
+  return nextLines
+}
+
+// `silent` re-baselines without raising the badge — used for the first load and while the
+// user is already watching the tail of the error pane live
+const trackNewErrors = (text, { silent = false } = {}) => {
+  const stderr = text === NO_LOGS ? '' : (text || '')
+  if (silent) { seenStderr.value = stderr; newErrorCount.value = 0; return }
+  const added = appendedLines(seenStderr.value, stderr).filter(line => line.trim())
+  seenStderr.value = stderr
+  if (!added.length) return
+  newErrorCount.value += added.length
+  showAlert(`${added.length} new error log line${added.length > 1 ? 's' : ''} in ${appName.value}`, 'warning')
+}
+
+const acknowledgeErrors = () => {
+  newErrorCount.value = 0
+  seenStderr.value = logs.value.stderr === NO_LOGS ? '' : logs.value.stderr
+}
+
+const rawLogs = computed(() => logs.value[logType.value] || NO_LOGS)
 
 const logLines = computed(() =>
-  rawLogs.value.split(/\n|<br\s*\/?>/i).map(text => {
+  rawLogs.value.split(LOG_LINE_SPLIT).map(text => {
     const l = text.toLowerCase()
     const level =
       l.includes('error') || l.includes('fatal') || l.includes('exception') ? 'error' :
@@ -580,8 +628,11 @@ const loadAppData = async () => {
     const res = await api.getApp(appName.value)
     if (res.data.success) {
       app.value = res.data.data.app
-      logs.value.stdout = res.data.data.logs.stdout.lines || 'No logs available'
-      logs.value.stderr = res.data.data.logs.stderr.lines || 'No logs available'
+      logs.value.stdout = res.data.data.logs.stdout.lines || NO_LOGS
+      logs.value.stderr = res.data.data.logs.stderr.lines || NO_LOGS
+      // The very first load has nothing to compare against — only later reloads can be "new"
+      trackNewErrors(logs.value.stderr, { silent: !errorBaselineSet })
+      errorBaselineSet = true
       envContent.value = res.data.data.app.env_file_raw || ''
       envBackup.value = res.data.data.app.env_file_raw_backup || ''
       envEdit.value = res.data.data.app.env_file_raw || ''
@@ -618,7 +669,9 @@ const pollLogs = async () => {
       // The log type can change while the request is in flight — dropping the answer
       // is better than pasting stderr into the stdout pane
       if (type === logType.value) {
-        logs.value[type] = res.data.data.logs.lines || 'No logs available'
+        logs.value[type] = res.data.data.logs.lines || NO_LOGS
+        // Lines arriving under the user's eyes while they follow the tail are not unread
+        if (type === 'stderr') trackNewErrors(logs.value.stderr, { silent: stickToBottom.value })
         scrollToBottom()
       }
     }
@@ -644,7 +697,10 @@ const startRealtime = () => {
 
 watch(realtime, (on) => { on ? startRealtime() : stopRealtime() })
 // Switching pane while live: fetch that log immediately instead of waiting out the interval
-watch(logType, () => { if (realtime.value) { scrollToBottom(true); pollLogs() } })
+watch(logType, (type) => {
+  if (type === 'stderr') acknowledgeErrors()
+  if (realtime.value) { scrollToBottom(true); pollLogs() }
+})
 
 // Polling a background tab burns requests for output nobody is reading
 const onVisibilityChange = () => { if (!document.hidden && realtime.value) pollLogs() }
@@ -859,6 +915,17 @@ onMounted(() => {
 
 /* Action buttons */
 .action-btn { font-size:.8rem !important; }
+
+/* Unread-error badge on the Error tab */
+.err-badge {
+  display:inline-flex; align-items:center; margin-left:6px; padding:0 6px; height:17px;
+  border-radius:9px; background:#ef4444; color:#fff; font-size:.68rem; font-weight:700;
+  line-height:1; animation:err-pulse 1.4s ease-in-out infinite;
+}
+@keyframes err-pulse {
+  0%,100% { box-shadow:0 0 0 0 rgba(239,68,68,.55); }
+  50%     { box-shadow:0 0 0 5px rgba(239,68,68,0); }
+}
 
 /* Tabs */
 .tab-label { text-transform:none; font-size:.8rem; letter-spacing:0; }

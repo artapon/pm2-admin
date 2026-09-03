@@ -3,6 +3,7 @@ const { readLogsReverse } = require('../utils/read-logs.util');
 const { getCurrentGitBranch, getCurrentGitCommit, gitPull, listBranches, checkoutBranch, gitClone } = require('../utils/git.util');
 const { getEnvFileRawContent, getEnvFileRawBackupContent, parseEnv, setEnvDataSyncAndBackup, resolveEnvFilePath } = require('../utils/env.util');
 const { formatBytes } = require('../utils/format.util');
+const { isValidAppName } = require('../utils/app-name.util');
 const fs = require('fs');
 const path = require('path');
 const sysinfo = require('../utils/sysinfo.util');
@@ -20,11 +21,11 @@ const sanitizeLogLine = (line) => String(line)
 const formatLogLines = (lines) => lines.map(sanitizeLogLine).join('\n');
 
 // Strict validators — applied to user-controlled inputs that flow into PM2/git/fs ops.
-const APP_NAME_RE = /^[A-Za-z0-9_.,:\-]{1,128}$/;
+// App names validate through utils/app-name.util so routes, controller and the PM2
+// provider cannot drift apart on what a valid name is.
 const BRANCH_RE = /^[A-Za-z0-9._\-\/]{1,128}$/;
 // Only allow a small whitelist of safe Node CLI flags, no values, no paths, no --require/--inspect/etc.
 const NODE_ARG_RE = /^--(max-old-space-size=\d{1,5}|use-strict|no-deprecation|no-warnings|throw-deprecation|preserve-symlinks|preserve-symlinks-main)$/;
-const isValidAppName = (n) => typeof n === 'string' && APP_NAME_RE.test(n);
 const isRoot = (req) => req.session && req.session.role === 'root';
 const validateNodeArgs = (raw) => {
     if (raw === undefined || raw === null || raw === '') return '';
