@@ -43,7 +43,7 @@ if errorlevel 1 (
     echo %YW%[WARN]%RS%  PM2 not found. Installing...
     call npm install -g pm2 || ( echo %RD%[ERROR]%RS% PM2 install failed. & pause & exit /b 1 )
 )
-echo %GN%[ OK ]%RS%  PM2 & pm2 -v
+echo %GN%[ OK ]%RS%  PM2 & call pm2 -v
 
 cd /d "%ROOT%"
 
@@ -64,11 +64,14 @@ if not exist "src\frontend\dist" (
 )
 
 :: Read PORT and HOST from .env
-set "PORT=4343"
-set "HOST=127.0.0.1"
-for /f "usebackq tokens=1,* delims==" %%A in ("%ROOT%\.env") do (
-    if "%%A"=="PORT" set "PORT=%%B"
-    if "%%A"=="HOST" set "HOST=%%B"
+:: (pipe through findstr so cmd strips \r from CRLF line endings; APP_ prefixed so the
+::  values are not exported into the environment the app inherits, where they would
+::  win over .env itself -- dotenv never overrides a variable that is already set)
+set "APP_PORT=4343"
+set "APP_HOST=127.0.0.1"
+for /f "tokens=1,* delims==" %%A in ('findstr /B /C:"PORT=" /C:"HOST=" "%ROOT%\.env"') do (
+    if "%%A"=="PORT" set "APP_PORT=%%B"
+    if "%%A"=="HOST" set "APP_HOST=%%B"
 )
 
 set "APP_NAME=pm2-admin"
@@ -76,17 +79,17 @@ set "APP_NAME=pm2-admin"
 :: ── Register app with PM2 ─────────────────────────────────────────────────────
 echo.
 echo %CY%Registering '%APP_NAME%' with PM2...%RS%
-pm2 describe %APP_NAME% >nul 2>&1 && (
+call pm2 describe %APP_NAME% >nul 2>&1 && (
     echo %YW%[WARN]%RS%  Existing PM2 process '%APP_NAME%' found — deleting...
-    pm2 delete %APP_NAME%
+    call pm2 delete %APP_NAME%
 )
 :: --cwd pins the process to the project root so PM2 keeps it there across resurrects
-pm2 start "%ROOT%\src\app.js" --name "%APP_NAME%" --cwd "%ROOT%" --log-date-format "YYYY-MM-DD HH:mm:ss" --restart-delay 3000 --max-restarts 10
+call pm2 start "%ROOT%\src\app.js" --name "%APP_NAME%" --cwd "%ROOT%" --log-date-format "YYYY-MM-DD HH:mm:ss" --restart-delay 3000 --max-restarts 10
 if errorlevel 1 (
     echo %RD%[ERROR]%RS% PM2 start failed. Check output above.
     pause & exit /b 1
 )
-pm2 save
+call pm2 save
 echo %GN%[ OK ]%RS%  PM2 process saved.
 
 :: ── NSSM: make PM2 a Windows Service ─────────────────────────────────────────
@@ -148,12 +151,12 @@ if errorlevel 1 (
 :summary
 echo.
 echo %GN%[ OK ]%RS%  pm2-admin is running!
-echo   URL    : %BD%http://!HOST!:!PORT!%RS%
+echo   URL    : %BD%http://!APP_HOST!:!APP_PORT!%RS%
 echo   Logs   : %BD%pm2 logs %APP_NAME%%RS%
 echo   Status : %BD%pm2 status%RS%
 echo   Stop   : %BD%pm2 stop %APP_NAME%%RS%
 echo   Remove : %BD%pm2 delete %APP_NAME%%RS%
 echo.
 
-start "" "http://localhost:!PORT!"
+start "" "http://localhost:!APP_PORT!"
 pause

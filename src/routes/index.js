@@ -26,6 +26,8 @@ router.get('/ports', serveIndex);
 router.get('/git-clone', serveIndex);
 router.get('/users', serveIndex);
 router.get('/scheduled-tasks', serveIndex);
+router.get('/environments', serveIndex);
+router.get('/environments/:id', serveIndex);
 
 // Confirms a candidate file path is inside an allowed app cwd. Defends against
 // PM2 returning a manipulated path or symlink-based escape.

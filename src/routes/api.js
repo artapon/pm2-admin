@@ -7,6 +7,7 @@ const authController = require('../controllers/auth.controller');
 const systemController = require('../controllers/system.controller');
 const usersController = require('../controllers/users.controller');
 const nvmController = require('../controllers/nvm.controller');
+const environmentsController = require('../controllers/environments.controller');
 
 // Login: tight limit + per-IP, slows brute-force significantly
 const loginRateLimiter = rateLimit({
@@ -117,6 +118,66 @@ router.get('/system/scheduled-tasks', isAuthenticated, isRoot, systemController.
 router.get('/system/logrotate', isAuthenticated, isRoot, systemController.getLogRotateConfig);
 router.post('/system/logrotate', isAuthenticated, isRoot, writeActionLimiter, systemController.setLogRotateConfig);
 router.post('/system/logrotate/install', isAuthenticated, isRoot, writeActionLimiter, systemController.installLogRotate);
+
+// Environment routes — remote pm2-agent servers.
+// Managing them means handling agent tokens, so CRUD is root only. Reading their data is
+// open to any authenticated user, matching what the same data costs locally: the app list
+// and metrics are visible to everyone, `describe` is root only.
+//
+// Every call here reaches out to another machine, so the write limiter also guards the
+// read-through proxy — an unthrottled page could otherwise turn one dashboard user into a
+// stream of requests against every monitored server at once.
+const agentReadLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Too many requests' }
+});
+
+// A connection test opens a socket to an operator-supplied address — kept tight so the
+// endpoint is not a comfortable way to probe the network.
+const agentTestLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Too many connection tests, please try again later' }
+});
+
+// Fixed paths must be declared before '/:id', or 'overview' is read as an environment id.
+router.get('/environments/overview', isAuthenticated, agentReadLimiter, environmentsController.getEnvironmentsOverview);
+router.post('/environments/test', isAuthenticated, isRoot, agentTestLimiter, environmentsController.testEnvironment);
+
+router.get('/environments', isAuthenticated, environmentsController.getAllEnvironments);
+router.post('/environments', isAuthenticated, isRoot, writeActionLimiter, environmentsController.createEnvironment);
+router.get('/environments/:id', isAuthenticated, environmentsController.getEnvironment);
+router.patch('/environments/:id', isAuthenticated, isRoot, writeActionLimiter, environmentsController.updateEnvironment);
+router.delete('/environments/:id', isAuthenticated, isRoot, writeActionLimiter, environmentsController.deleteEnvironment);
+router.post('/environments/:id/test', isAuthenticated, isRoot, agentTestLimiter, environmentsController.testEnvironment);
+
+// Read-through proxy to the agent on each environment
+router.get('/environments/:id/info', isAuthenticated, agentReadLimiter, environmentsController.getEnvironmentInfo);
+router.get('/environments/:id/apps', isAuthenticated, agentReadLimiter, environmentsController.getEnvironmentApps);
+router.get('/environments/:id/apps/:appName', isAuthenticated, agentReadLimiter, environmentsController.getEnvironmentApp);
+router.get('/environments/:id/apps/:appName/logs/:logType', isAuthenticated, agentReadLimiter, environmentsController.getEnvironmentAppLogs);
+router.get('/environments/:id/apps/:appName/describe', isAuthenticated, isRoot, agentReadLimiter, environmentsController.getEnvironmentAppDescribe);
+// Remote app actions — root only here, and the agent can refuse them outright
+router.post('/environments/:id/apps/:appName/reload', isAuthenticated, isRoot, writeActionLimiter, environmentsController.reloadEnvironmentApp);
+router.post('/environments/:id/apps/:appName/restart', isAuthenticated, isRoot, writeActionLimiter, environmentsController.restartEnvironmentApp);
+router.post('/environments/:id/apps/:appName/stop', isAuthenticated, isRoot, writeActionLimiter, environmentsController.stopEnvironmentApp);
+router.post('/environments/:id/apps/:appName/reset', isAuthenticated, isRoot, writeActionLimiter, environmentsController.resetEnvironmentApp);
+router.post('/environments/:id/apps/:appName/flush', isAuthenticated, isRoot, writeActionLimiter, environmentsController.flushEnvironmentApp);
+router.delete('/environments/:id/apps/:appName', isAuthenticated, isRoot, writeActionLimiter, environmentsController.deleteEnvironmentApp);
+
+// A remote app's .env — root only, like the local one: it carries credentials
+router.get('/environments/:id/apps/:appName/env', isAuthenticated, isRoot, agentReadLimiter, environmentsController.getEnvironmentAppEnv);
+router.post('/environments/:id/apps/:appName/env', isAuthenticated, isRoot, writeActionLimiter, environmentsController.updateEnvironmentAppEnv);
+
+router.get('/environments/:id/system/info', isAuthenticated, agentReadLimiter, environmentsController.getEnvironmentSystemInfo);
+router.get('/environments/:id/system/monitor', isAuthenticated, agentReadLimiter, environmentsController.getEnvironmentMonitor);
+router.get('/environments/:id/system/ports', isAuthenticated, agentReadLimiter, environmentsController.getEnvironmentPorts);
+router.get('/environments/:id/system/processes', isAuthenticated, agentReadLimiter, environmentsController.getEnvironmentProcesses);
 
 // NVM routes — the interpreter paths describe the server layout, and installing a
 // runtime is a privileged action, so the whole area is root only

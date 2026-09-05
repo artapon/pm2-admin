@@ -73,6 +73,7 @@ import { useAuthStore } from '../stores/auth'
 import { useAlert } from '../composables/useAlert'
 import { useBusy } from '../composables/useBusy'
 import api from '../services/api'
+import { pm2Modules } from '../utils/apps'
 import MainAppBar from '../components/MainAppBar.vue'
 
 const authStore = useAuthStore()
@@ -84,7 +85,7 @@ const loading = ref(false)
 const restartDialog = ref(false)
 const appToRestart = ref('')
 
-const plugins = computed(() => allApps.value.filter(a => a.name.startsWith('pm2-')))
+const plugins = computed(() => pm2Modules(allApps.value))
 
 const headers = computed(() => {
   const base = [

@@ -130,6 +130,85 @@ export default {
         return api.post('/nvm/install', { version });
     },
 
+    // Environments (remote pm2-agent servers)
+    getEnvironments() {
+        return api.get('/environments')
+    },
+    getEnvironmentsOverview() {
+        return api.get('/environments/overview')
+    },
+    getEnvironment(id) {
+        return api.get(`/environments/${id}`)
+    },
+    createEnvironment(data) {
+        return api.post('/environments', data)
+    },
+    updateEnvironment(id, data) {
+        return api.patch(`/environments/${id}`, data)
+    },
+    deleteEnvironment(id) {
+        return api.delete(`/environments/${id}`)
+    },
+    // Saved environment when `id` is given, otherwise the unsaved values in the dialog
+    testEnvironment(id, data) {
+        return id ? api.post(`/environments/${id}/test`) : api.post('/environments/test', data)
+    },
+
+    // Environment data — same payload shapes as the local endpoints above
+    getEnvironmentInfo(id) {
+        return api.get(`/environments/${id}/info`)
+    },
+    getEnvironmentApps(id) {
+        return api.get(`/environments/${id}/apps`)
+    },
+    getEnvironmentApp(id, appName) {
+        return api.get(`/environments/${id}/apps/${encodeURIComponent(appName)}`)
+    },
+    getEnvironmentAppLogs(id, appName, logType, nextKey) {
+        return api.get(`/environments/${id}/apps/${encodeURIComponent(appName)}/logs/${logType}`, { params: { nextKey } })
+    },
+    getEnvironmentAppDescribe(id, appName) {
+        return api.get(`/environments/${id}/apps/${encodeURIComponent(appName)}/describe`)
+    },
+    // Remote app .env — root only
+    getEnvironmentAppEnv(id, appName) {
+        return api.get(`/environments/${id}/apps/${encodeURIComponent(appName)}/env`)
+    },
+    updateEnvironmentAppEnv(id, appName, envContent) {
+        return api.post(`/environments/${id}/apps/${encodeURIComponent(appName)}/env`, { env_content: envContent })
+    },
+    // Remote app actions — root only, and refused by an agent running read-only
+    reloadEnvironmentApp(id, appName) {
+        return api.post(`/environments/${id}/apps/${encodeURIComponent(appName)}/reload`)
+    },
+    restartEnvironmentApp(id, appName) {
+        return api.post(`/environments/${id}/apps/${encodeURIComponent(appName)}/restart`)
+    },
+    stopEnvironmentApp(id, appName) {
+        return api.post(`/environments/${id}/apps/${encodeURIComponent(appName)}/stop`)
+    },
+    resetEnvironmentApp(id, appName) {
+        return api.post(`/environments/${id}/apps/${encodeURIComponent(appName)}/reset`)
+    },
+    flushEnvironmentApp(id, appName) {
+        return api.post(`/environments/${id}/apps/${encodeURIComponent(appName)}/flush`)
+    },
+    deleteEnvironmentApp(id, appName) {
+        return api.delete(`/environments/${id}/apps/${encodeURIComponent(appName)}`)
+    },
+    getEnvironmentSystemInfo(id) {
+        return api.get(`/environments/${id}/system/info`)
+    },
+    getEnvironmentMonitor(id) {
+        return api.get(`/environments/${id}/system/monitor`)
+    },
+    getEnvironmentPorts(id) {
+        return api.get(`/environments/${id}/system/ports`)
+    },
+    getEnvironmentProcesses(id) {
+        return api.get(`/environments/${id}/system/processes`)
+    },
+
     // Users (IT Admin only)
     getUsers() {
         return api.get('/users');

@@ -27,26 +27,58 @@
 
     <!-- Main Nav -->
     <v-list nav density="compact" class="sidebar-nav px-2 pt-2">
-      <v-list-item
-        v-for="item in navItems"
-        :key="item.to"
-        :to="item.to"
-        :prepend-icon="item.icon"
-        :title="item.title"
-        :active="isActive(item.to)"
-        active-color="primary"
-        rounded="lg"
-        class="nav-item mb-1"
-        :class="{ 'nav-item--active': isActive(item.to) }"
-      >
-        <template v-if="layoutStore.rail && !mobile" v-slot:title>
-          <v-tooltip :text="item.title" location="end">
-            <template v-slot:activator="{ props }">
-              <span v-bind="props"></span>
-            </template>
-          </v-tooltip>
-        </template>
-      </v-list-item>
+      <template v-for="item in navItems" :key="item.to">
+        <v-list-item
+          :to="item.to"
+          :prepend-icon="item.icon"
+          :title="item.title"
+          :active="isActive(item.to)"
+          active-color="primary"
+          rounded="lg"
+          class="nav-item mb-1"
+          :class="{ 'nav-item--active': isActive(item.to) }"
+        >
+          <template v-if="layoutStore.rail && !mobile" v-slot:title>
+            <v-tooltip :text="item.title" location="end">
+              <template v-slot:activator="{ props }">
+                <span v-bind="props"></span>
+              </template>
+            </v-tooltip>
+          </template>
+
+          <!-- Expander for the environment list; the item itself still navigates -->
+          <template v-if="item.to === '/environments' && showEnvSubmenu" v-slot:append>
+            <v-icon
+              size="16"
+              class="submenu-chevron"
+              @click.prevent.stop="envOpen = !envOpen"
+            >
+              {{ envOpen ? 'mdi-chevron-up' : 'mdi-chevron-down' }}
+            </v-icon>
+          </template>
+        </v-list-item>
+
+        <!-- Environment submenu -->
+        <v-expand-transition v-if="item.to === '/environments'">
+          <div v-show="envOpen && showEnvSubmenu" class="submenu mb-1">
+            <v-list-item
+              v-for="env in environments"
+              :key="env.id"
+              :to="`/environments/${env.id}`"
+              :active="route.path === `/environments/${env.id}`"
+              active-color="primary"
+              rounded="lg"
+              class="nav-item nav-subitem"
+              :class="{ 'nav-item--active': route.path === `/environments/${env.id}` }"
+            >
+              <template v-slot:prepend>
+                <span class="env-dot" :class="env.enabled ? 'env-dot--on' : 'env-dot--off'"></span>
+              </template>
+              <v-list-item-title class="submenu-title">{{ env.name }}</v-list-item-title>
+            </v-list-item>
+          </div>
+        </v-expand-transition>
+      </template>
 
       <!-- Root-only items -->
       <template v-if="authStore.role === 'root'">
@@ -119,11 +151,12 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { useAuthStore } from '../stores/auth'
 import { useLayoutStore } from '../stores/layout'
+import api from '../services/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -133,6 +166,7 @@ const { mobile } = useDisplay()
 
 const navItems = [
   { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', to: '/apps' },
+  { title: 'Environments', icon: 'mdi-server-network', to: '/environments' },
   { title: 'Monitor', icon: 'mdi-chart-line', to: '/monitor' },
   { title: 'Ports', icon: 'mdi-lan', to: '/ports' },
   { title: 'Scheduled Tasks', icon: 'mdi-calendar-clock-outline', to: '/scheduled-tasks' },
@@ -146,8 +180,41 @@ const rootItems = [
   { title: 'Users', icon: 'mdi-account-group-outline', to: '/users' },
 ]
 
+// Environment submenu -------------------------------------------------------
+const environments = ref([])
+const envOpen = ref(route.path.startsWith('/environments'))
+
+// Collapsed rail has no room for names, so the submenu only shows when expanded.
+const showEnvSubmenu = computed(() =>
+  environments.value.length > 0 && (!layoutStore.rail || mobile.value)
+)
+
+const loadEnvironments = async () => {
+  if (!authStore.isAuthenticated) return
+  try {
+    const res = await api.getEnvironments()
+    if (res.data.success) environments.value = res.data.data
+  } catch {
+    environments.value = []
+  }
+}
+
+// Refresh on login and whenever the environments page is opened, so adds and
+// deletes made there show up in the menu without a reload.
+watch(() => authStore.isAuthenticated, (ok) => { if (ok) loadEnvironments() })
+watch(() => route.path, (path) => {
+  if (path.startsWith('/environments')) {
+    envOpen.value = true
+    if (path === '/environments') loadEnvironments()
+  }
+})
+
+onMounted(loadEnvironments)
+
 const isActive = (to) => {
   if (to === '/apps') return route.path === '/apps' || route.path.startsWith('/apps/')
+  // Keep the menu item lit while viewing one environment's detail page
+  if (to === '/environments') return route.path === '/environments' || route.path.startsWith('/environments/')
   return route.path === to
 }
 
@@ -256,6 +323,41 @@ const handleLogout = async () => {
 .nav-item :deep(.v-list-item-title) {
   color: inherit !important;
 }
+
+.submenu-chevron {
+  color: #64748b !important;
+  border-radius: 4px;
+}
+
+.submenu-chevron:hover {
+  color: #e2e8f0 !important;
+}
+
+.submenu {
+  padding-left: 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  margin-left: 18px;
+}
+
+.nav-subitem {
+  min-height: 32px !important;
+  font-size: 0.8rem !important;
+}
+
+.submenu-title {
+  font-size: 0.8rem !important;
+}
+
+.env-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.env-dot--on { background: #22c55e; }
+.env-dot--off { background: #475569; }
 
 .sidebar-footer {
   padding: 0;

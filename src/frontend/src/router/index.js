@@ -25,6 +25,24 @@ const routes = [
         meta: { requiresAuth: true }
     },
     {
+        path: '/environments',
+        name: 'Environments',
+        component: () => import('../views/Environments.vue'),
+        meta: { requiresAuth: true }
+    },
+    {
+        path: '/environments/:id',
+        name: 'EnvironmentDetail',
+        component: () => import('../views/EnvironmentDetail.vue'),
+        meta: { requiresAuth: true }
+    },
+    {
+        path: '/environments/:id/apps/:appName',
+        name: 'EnvironmentAppDetail',
+        component: () => import('../views/EnvironmentAppDetail.vue'),
+        meta: { requiresAuth: true }
+    },
+    {
         path: '/ports',
         name: 'ListeningPorts',
         component: () => import('../views/ListeningPorts.vue'),

@@ -244,6 +244,7 @@ import { useAuthStore } from '../stores/auth'
 import { useAlert } from '../composables/useAlert'
 import { useBusy } from '../composables/useBusy'
 import api from '../services/api'
+import { visibleApps } from '../utils/apps'
 import MainAppBar from '../components/MainAppBar.vue'
 
 const router = useRouter()
@@ -258,7 +259,7 @@ const search = ref('')
 const nodeVersion = ref('...')
 const showMetrics = ref(true)
 
-const apps = computed(() => allApps.value.filter(a => !a.name.startsWith('pm2-')))
+const apps = computed(() => visibleApps(allApps.value))
 const onlineCount  = computed(() => apps.value.filter(a => a.status === 'online').length)
 const stoppedCount = computed(() => apps.value.filter(a => a.status === 'stopped').length)
 const erroredCount = computed(() => apps.value.filter(a => a.status === 'errored').length)

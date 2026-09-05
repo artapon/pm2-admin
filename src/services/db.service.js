@@ -34,6 +34,22 @@ const initDb = () => {
             expires_at INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
+        -- Remote pm2-agent servers this dashboard reads from. The token column holds the
+        -- agent token encrypted by utils/secret.util (it must be replayed to the agent, so
+        -- it cannot be hashed) and is never returned by the API.
+        CREATE TABLE IF NOT EXISTS environments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            url TEXT NOT NULL,
+            token TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            allow_insecure_tls INTEGER NOT NULL DEFAULT 0,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_environments_enabled ON environments(enabled);
     `);
 
     // Migration: Rename 'admin' role to 'root'
